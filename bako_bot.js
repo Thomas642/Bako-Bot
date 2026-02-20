@@ -16,18 +16,18 @@ const {
 // ============================================================
 
 const CONFIG = {
-  DISCORD_TOKEN:    "VOTRE_TOKEN_ICI",          // Discord Developer Portal → Bot → Token
-  APPLICATION_ID:   "VOTRE_APPLICATION_ID_ICI", // Developer Portal → General → Application ID
-  CHANNEL_ID:       "ID_SALON_STATUS",           // Salon où poster le statut auto
-  DAILY_CHANNEL_ID: "ID_SALON_RESUME",           // Salon du résumé quotidien
+  DISCORD_TOKEN:    process.env.DISCORD_TOKEN,
+  APPLICATION_ID:   process.env.APPLICATION_ID,
+  CHANNEL_ID:       process.env.CHANNEL_ID,
+  DAILY_CHANNEL_ID: process.env.DAILY_CHANNEL_ID,
 
-  DAILY_SUMMARY_HOUR:   22,  // Heure du résumé quotidien
+  DAILY_SUMMARY_HOUR:   22,
   DAILY_SUMMARY_MINUTE:  0,
 
   API_BASE_URL: "https://api.lyg.fr/api",
-  FAMILY_NAME:  "bako",         // Nom URL de la famille (pour les endpoints)
-  FAMILY_ID:    "bako",         // ID famille pour les appels API
-  FAMILY_LABEL: "Famille Bako", // Nom affiché dans les embeds
+  FAMILY_NAME:  "bako",
+  FAMILY_ID:    "bako",
+  FAMILY_LABEL: "Famille Bako",
 
   CHECK_INTERVAL_MINUTES: 15,
 
@@ -42,13 +42,11 @@ const CONFIG = {
 
   API_DELAY_MS: 500,
 
-  // Couleurs des embeds (thème Bako)
-  COLOR_ONLINE:  0xf5c400,  // Jaune Pikachu ⚡
-  COLOR_OFFLINE: 0xff4444,  // Rouge
-  COLOR_INFO:    0xf0a500,  // Orange doré
-  COLOR_GOLD:    0xffd700,  // Or classement
+  COLOR_ONLINE:  0xf5c400,
+  COLOR_OFFLINE: 0xff4444,
+  COLOR_INFO:    0xf0a500,
+  COLOR_GOLD:    0xffd700,
 };
-
 // ============================================================
 // SLASH COMMANDS
 // ============================================================
