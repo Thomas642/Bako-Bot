@@ -16,10 +16,10 @@ const {
 // ============================================================
 
 const CONFIG = {
-  DISCORD_TOKEN:    "MTQ3NDQ2MDE5NDk1MDg3NzI5Nw.Gtm1Zx.AW4W7xsI_Wo3HwjEv91C5W_o3T2kOPGsqjKpK0",          // Discord Developer Portal → Bot → Token
-  APPLICATION_ID:   "1474460194950877297", // Developer Portal → General → Application ID
-  CHANNEL_ID:       "1262341083459878913",           // Salon où poster le statut auto
-  DAILY_CHANNEL_ID: "1262341083459878913",           // Salon du résumé quotidien
+  DISCORD_TOKEN:    "VOTRE_TOKEN_ICI",          // Discord Developer Portal → Bot → Token
+  APPLICATION_ID:   "VOTRE_APPLICATION_ID_ICI", // Developer Portal → General → Application ID
+  CHANNEL_ID:       "ID_SALON_STATUS",           // Salon où poster le statut auto
+  DAILY_CHANNEL_ID: "ID_SALON_RESUME",           // Salon du résumé quotidien
 
   DAILY_SUMMARY_HOUR:   22,  // Heure du résumé quotidien
   DAILY_SUMMARY_MINUTE:  0,
