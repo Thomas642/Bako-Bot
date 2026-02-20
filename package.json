@@ -1,0 +1,12 @@
+{
+  "name": "bako-bot",
+  "version": "1.0.0",
+  "description": "Bot Discord - Famille Bako ⚡",
+  "main": "bako_bot.js",
+  "scripts": {
+    "start": "node bako_bot.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.16.3"
+  }
+}
