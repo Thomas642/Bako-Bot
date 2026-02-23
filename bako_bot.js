@@ -524,6 +524,7 @@ client.on('interactionCreate', async interaction => {
         { name: '💰 Solde', value: `**${familyInfo.money?.toLocaleString('fr-FR')} €**`, inline: true },
         { name: '⭐ Points', value: `**${Math.round((familyInfo.points || 0) * 100) / 100}**`, inline: true }
       )
+      .setImage(LOGO_URL)
       .setTimestamp()
       .setFooter({ text: 'Bako Family • Pika Pika ⚡', iconURL: LOGO_URL });
     await interaction.editReply({ embeds: [embed] });
@@ -628,6 +629,7 @@ client.on('interactionCreate', async interaction => {
       .setColor(CONFIG.COLOR_GOLD)
       .setThumbnail(LOGO_URL)
       .setDescription(list.substring(0, 4000))
+      .setImage(LOGO_URL)
       .setTimestamp()
       .setFooter({ text: 'Bako Family • Pika Pika ⚡ | Trié par dépôts nets', iconURL: LOGO_URL });
     await interaction.editReply({ embeds: [embed] });
