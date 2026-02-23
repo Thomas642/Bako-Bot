@@ -11,6 +11,8 @@ const {
   Routes,
 } = require('discord.js');
 
+const LOGO_URL = "https://i.imgur.com/fyOaYXk.jpeg";
+
 // ============================================================
 // CONFIGURATION — À MODIFIER
 // ============================================================
@@ -21,13 +23,13 @@ const CONFIG = {
   CHANNEL_ID:       process.env.CHANNEL_ID,
   DAILY_CHANNEL_ID: process.env.DAILY_CHANNEL_ID,
 
-  DAILY_SUMMARY_HOUR:   22,
+  DAILY_SUMMARY_HOUR:   22,  // Heure du résumé quotidien
   DAILY_SUMMARY_MINUTE:  0,
 
   API_BASE_URL: "https://api.lyg.fr/api",
-  FAMILY_NAME:  "bako",
-  FAMILY_ID:    "bako",
-  FAMILY_LABEL: "Famille Bako",
+  FAMILY_NAME:  "bako",         // Nom URL de la famille (pour les endpoints)
+  FAMILY_ID:    "bako",         // ID famille pour les appels API
+  FAMILY_LABEL: "Famille Bako", // Nom affiché dans les embeds
 
   CHECK_INTERVAL_MINUTES: 15,
 
@@ -42,11 +44,13 @@ const CONFIG = {
 
   API_DELAY_MS: 500,
 
-  COLOR_ONLINE:  0xf5c400,
-  COLOR_OFFLINE: 0xff4444,
-  COLOR_INFO:    0xf0a500,
-  COLOR_GOLD:    0xffd700,
+  // Couleurs des embeds (thème Bako)
+  COLOR_ONLINE:  0xf5c400,  // Jaune Pikachu ⚡
+  COLOR_OFFLINE: 0xff4444,  // Rouge
+  COLOR_INFO:    0xf0a500,  // Orange doré
+  COLOR_GOLD:    0xffd700,  // Or classement
 };
+
 // ============================================================
 // SLASH COMMANDS
 // ============================================================
@@ -332,7 +336,8 @@ function createOnlineEmbed(data) {
     .setTitle(`⚡ ${CONFIG.FAMILY_LABEL} — Membres en ligne`)
     .setColor(online.length > 0 ? CONFIG.COLOR_ONLINE : CONFIG.COLOR_OFFLINE)
     .setTimestamp()
-    .setFooter({ text: `MAJ auto toutes les ${CONFIG.CHECK_INTERVAL_MINUTES} min` });
+    .setThumbnail(LOGO_URL)
+    .setFooter({ text: `Bako Family • Pika Pika ⚡ | MAJ auto toutes les ${CONFIG.CHECK_INTERVAL_MINUTES} min`, iconURL: LOGO_URL });
 
   if (familyInfo) {
     embed.setDescription(
@@ -419,7 +424,9 @@ async function sendDailySummary() {
     const embed = new EmbedBuilder()
       .setTitle(`📋 ${CONFIG.FAMILY_LABEL} — Résumé du jour`)
       .setColor(CONFIG.COLOR_INFO)
-      .setTimestamp();
+      .setThumbnail(LOGO_URL)
+      .setTimestamp()
+      .setFooter({ text: 'Bako Family • Pika Pika ⚡', iconURL: LOGO_URL });
 
     if (familyInfo) {
       embed.setDescription(
@@ -495,9 +502,11 @@ client.on('interactionCreate', async interaction => {
     const embed = new EmbedBuilder()
       .setTitle(`⚡ ${CONFIG.FAMILY_LABEL} — Tous les membres`)
       .setColor(CONFIG.COLOR_INFO)
+      .setThumbnail(LOGO_URL)
       .setDescription(list)
       .addFields({ name: '📊 Résumé', value: `🟢 **${data.online.length}** en ligne / 👥 **${data.total}** total` })
-      .setTimestamp();
+      .setTimestamp()
+      .setFooter({ text: 'Bako Family • Pika Pika ⚡', iconURL: LOGO_URL });
     await interaction.editReply({ embeds: [embed] });
   }
 
@@ -510,11 +519,13 @@ client.on('interactionCreate', async interaction => {
     const embed = new EmbedBuilder()
       .setTitle(`⚡ ${CONFIG.FAMILY_LABEL} — Informations`)
       .setColor(CONFIG.COLOR_ONLINE)
+      .setThumbnail(LOGO_URL)
       .addFields(
         { name: '💰 Solde', value: `**${familyInfo.money?.toLocaleString('fr-FR')} €**`, inline: true },
         { name: '⭐ Points', value: `**${Math.round((familyInfo.points || 0) * 100) / 100}**`, inline: true }
       )
-      .setTimestamp();
+      .setTimestamp()
+      .setFooter({ text: 'Bako Family • Pika Pika ⚡', iconURL: LOGO_URL });
     await interaction.editReply({ embeds: [embed] });
   }
 
@@ -567,7 +578,9 @@ client.on('interactionCreate', async interaction => {
     const embed = new EmbedBuilder()
       .setTitle(`🏦 ${CONFIG.FAMILY_LABEL} — Banque`)
       .setColor(CONFIG.COLOR_INFO)
-      .setTimestamp();
+      .setThumbnail(LOGO_URL)
+      .setTimestamp()
+      .setFooter({ text: 'Bako Family • Pika Pika ⚡', iconURL: LOGO_URL });
     if (familyInfo) embed.setDescription(`💰 **Solde :** ${familyInfo.money?.toLocaleString('fr-FR')} €`);
     embed.addFields(
       { name: '📜 10 dernières transactions', value: recentList.substring(0, 1024) },
@@ -613,9 +626,10 @@ client.on('interactionCreate', async interaction => {
     const embed = new EmbedBuilder()
       .setTitle(`🏆 ${CONFIG.FAMILY_LABEL} — Classement contributeurs`)
       .setColor(CONFIG.COLOR_GOLD)
+      .setThumbnail(LOGO_URL)
       .setDescription(list.substring(0, 4000))
-      .setFooter({ text: 'Trié par dépôts nets' })
-      .setTimestamp();
+      .setTimestamp()
+      .setFooter({ text: 'Bako Family • Pika Pika ⚡ | Trié par dépôts nets', iconURL: LOGO_URL });
     await interaction.editReply({ embeds: [embed] });
   }
 
@@ -706,6 +720,7 @@ client.on('interactionCreate', async interaction => {
     const embed = new EmbedBuilder()
       .setTitle(`👤 ${playerName}`)
       .setColor(connected ? CONFIG.COLOR_ONLINE : CONFIG.COLOR_OFFLINE)
+      .setThumbnail(LOGO_URL)
       .addFields(
         { name: '📊 Statut',  value: `${status}\n${roleStr}\n${staff}`, inline: true },
         { name: '🪙 Coins',   value: `**${(playerInfo?.coins || 0).toLocaleString('fr-FR')}**`, inline: true },
@@ -727,7 +742,7 @@ client.on('interactionCreate', async interaction => {
       embed.addFields({ name: '💬 Discord', value: `<@${playerInfo.discordid}>`, inline: true });
     }
 
-    embed.setFooter({ text: inFamily ? '⚡ Membre de la Bako' : '🔍 Joueur hors famille' });
+    embed.setFooter({ text: inFamily ? '⚡ Membre de la Bako' : '🔍 Joueur hors famille', iconURL: LOGO_URL });
 
     await interaction.editReply({ embeds: [embed] });
   }
@@ -770,7 +785,9 @@ client.on('interactionCreate', async interaction => {
     const embed = new EmbedBuilder()
       .setTitle(`⚠️ Warns — ${playerName}`)
       .setColor(warns.length > 0 ? CONFIG.COLOR_OFFLINE : 0x4caf50)
-      .setTimestamp();
+      .setThumbnail(LOGO_URL)
+      .setTimestamp()
+      .setFooter({ text: 'Bako Family • Pika Pika ⚡', iconURL: LOGO_URL });
 
     if (warns.length === 0) {
       embed.setDescription('✅ Aucun avertissement actif.');
