@@ -180,16 +180,12 @@ async function apiCall(endpoint) {
           // JSON.parse arrondit les grands entiers (Discord IDs 64-bit)
           // On remplace "discordid": 123456789 par "discordid": "123456789" avant parsing
           const text  = await response.text();
-          // Protéger TOUS les grands entiers avant JSON.parse (Discord IDs, SteamIDs)
-          // JSON.parse perd la précision sur les entiers > 2^53
-          const fixed = text.replace(/:\s*(\d{15,})/g, ':"$1"');
-          try {
-            resolve(JSON.parse(fixed));
-          } catch(e) {
-            // Fallback si le remplacement casse le JSON
-            console.warn(`⚠️ JSON fix échoué sur ${endpoint}, fallback brut`);
-            resolve(JSON.parse(text));
-          }
+          // Cibler uniquement les champs connus qui contiennent des grands entiers
+          // (discordid, steamid) pour éviter de casser d'autres valeurs JSON
+          const fixed = text
+            .replace(/"discordid"\s*:\s*(\d+)/g, '"discordid":"$1"')
+            .replace(/"steamid"\s*:\s*(\d+)/g,   '"steamid":"$1"');
+          resolve(JSON.parse(fixed));
         } else {
           console.error(`❌ API ${endpoint}: ${response.status}`);
           resolve(null);
