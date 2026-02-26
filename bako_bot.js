@@ -234,7 +234,7 @@ function createExpiredRow() {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('expired')
-      .setLabel('⏱️ Expiré — relance la commande')
+      .setLabel('⏱️ Expiré | relance la commande')
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(true)
   );
