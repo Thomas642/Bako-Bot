@@ -401,7 +401,7 @@ function createOnlineEmbed(data) {
     .setColor(online.length > 0 ? CONFIG.COLOR_ONLINE : CONFIG.COLOR_OFFLINE)
     .setTimestamp()
     .setThumbnail(LOGO_URL)
-    .setFooter({ text: `Bako Family • Pika Pika ⚡ | MAJ auto toutes les ${CONFIG.CHECK_INTERVAL_MINUTES} min`, iconURL: LOGO_URL });
+    .setFooter({ text: `Bako Family • Pika Pika ⚡ | MAJ auto toutes les 8h`, iconURL: LOGO_URL });
 
   if (familyInfo) {
     embed.setDescription(
@@ -928,13 +928,13 @@ client.on('interactionCreate', async interaction => {
 client.once('clientReady', async () => {
   console.log(`✅ Bot connecté : ${client.user.tag}`);
   console.log(`⚡ Famille      : ${CONFIG.FAMILY_LABEL}`);
-  console.log(`⏰ Statut auto  : toutes les ${CONFIG.CHECK_INTERVAL_MINUTES} min`);
+  console.log(`⏰ Statut auto  : toutes les 8h (00h, 08h, 16h)`);
   console.log(`📋 Résumé       : toutes les 8h (00h, 08h, 16h)`);
 
   await registerCommands();
 
   setTimeout(updateStatusMessage, 10000);
-  setInterval(updateStatusMessage, CONFIG.CHECK_INTERVAL_MINUTES * 60 * 1000);
+  setInterval(updateStatusMessage, 8 * 60 * 60 * 1000); // toutes les 8h
   setInterval(checkDailySummary, 60 * 1000);
 });
 
