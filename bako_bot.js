@@ -180,12 +180,18 @@ async function apiCall(endpoint) {
           // JSON.parse arrondit les grands entiers (Discord IDs 64-bit)
           // On remplace "discordid": 123456789 par "discordid": "123456789" avant parsing
           const text  = await response.text();
+          // Debug : afficher le discordid brut reçu de l'API
+          const rawDiscord = text.match(/"discordid"\s*:\s*"?(\d+)"?/);
+          if (rawDiscord) console.log(`🔍 discordid brut API [${endpoint}]: ${rawDiscord[1]}`);
           // Cibler uniquement les champs connus qui contiennent des grands entiers
-          // (discordid, steamid) pour éviter de casser d'autres valeurs JSON
           const fixed = text
-            .replace(/"discordid"\s*:\s*(\d+)/g, '"discordid":"$1"')
-            .replace(/"steamid"\s*:\s*(\d+)/g,   '"steamid":"$1"');
-          resolve(JSON.parse(fixed));
+            .replace(/"discordid"\s*:\s*"?(\d+)"?/g, '"discordid":"$1"')
+            .replace(/"steamid"\s*:\s*"?(\d+)"?/g,   '"steamid":"$1"');
+          const parsed = JSON.parse(fixed);
+          // Debug : afficher le discordid après parsing
+          const parsedDiscord = parsed?.data?.discordid || parsed?.discordid;
+          if (parsedDiscord) console.log(`✅ discordid après fix [${endpoint}]: ${parsedDiscord}`);
+          resolve(parsed);
         } else {
           console.error(`❌ API ${endpoint}: ${response.status}`);
           resolve(null);
