@@ -248,12 +248,6 @@ async function attachMenuCollector(message, menuType, steamid, interaction) {
   });
 
   collector.on('collect', async i => {
-    // Ignorer si c'est pas l'utilisateur original
-    if (i.user.id !== interaction.user.id) {
-      await i.reply({ content: "❌ Ce menu ne t'appartient pas.", ephemeral: true });
-      return;
-    }
-
     await i.deferUpdate();
     const value = i.values[0];
 
