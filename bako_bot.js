@@ -7,6 +7,12 @@ const {
   GatewayIntentBits,
   EmbedBuilder,
   SlashCommandBuilder,
+  StringSelectMenuBuilder,
+  StringSelectMenuOptionBuilder,
+  ActionRowBuilder,
+  ButtonBuilder,
+  ButtonStyle,
+  ComponentType,
   REST,
   Routes,
 } = require('discord.js');
@@ -149,6 +155,236 @@ function setCache(key, data) {
 function clearCache() {
   Object.keys(cache).forEach(k => delete cache[k]);
   console.log('🗑️ Cache vidé');
+}
+
+// ============================================================
+// MENUS INTERACTIFS — Gestion expiration 10 min
+// ============================================================
+
+const MENU_TIMEOUT = 10 * 60 * 1000; // 10 minutes
+
+// Crée un menu déroulant pour /warns
+function createWarnsMenu(steamid) {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`menu_warns_${steamid}`)
+      .setPlaceholder('⚡ Actions...')
+      .addOptions(
+        new StringSelectMenuOptionBuilder().setLabel('🔄 Rafraîchir').setValue('refresh').setDescription('Recharger les warns'),
+        new StringSelectMenuOptionBuilder().setLabel('👤 Voir fiche joueur').setValue('joueur').setDescription('Afficher la fiche complète'),
+      )
+  );
+}
+
+// Crée un menu déroulant pour /joueur
+function createJoueurMenu(steamid) {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`menu_joueur_${steamid}`)
+      .setPlaceholder('⚡ Actions...')
+      .addOptions(
+        new StringSelectMenuOptionBuilder().setLabel('🔄 Rafraîchir').setValue('refresh').setDescription('Recharger la fiche'),
+        new StringSelectMenuOptionBuilder().setLabel('⚠️ Voir ses warns').setValue('warns').setDescription('Afficher les avertissements'),
+        new StringSelectMenuOptionBuilder().setLabel('💰 Voir contributions').setValue('contributions').setDescription('Afficher les contributions bancaires'),
+      )
+  );
+}
+
+// Crée un menu déroulant pour /online
+function createOnlineMenu() {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('menu_online')
+      .setPlaceholder('⚡ Actions...')
+      .addOptions(
+        new StringSelectMenuOptionBuilder().setLabel('🔄 Rafraîchir').setValue('refresh').setDescription('Recharger les membres en ligne'),
+        new StringSelectMenuOptionBuilder().setLabel('📊 Voir stats complètes').setValue('stats').setDescription('Liste complète de tous les membres'),
+      )
+  );
+}
+
+// Crée un menu déroulant pour /banque
+function createBanqueMenu() {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('menu_banque')
+      .setPlaceholder('⚡ Actions...')
+      .addOptions(
+        new StringSelectMenuOptionBuilder().setLabel('🔄 Rafraîchir').setValue('refresh').setDescription('Recharger les transactions'),
+        new StringSelectMenuOptionBuilder().setLabel('🏆 Voir classement').setValue('classement').setDescription('Top contributeurs'),
+      )
+  );
+}
+
+// Crée un menu déroulant pour /classement
+function createClassementMenu() {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('menu_classement')
+      .setPlaceholder('⚡ Actions...')
+      .addOptions(
+        new StringSelectMenuOptionBuilder().setLabel('🔄 Rafraîchir').setValue('refresh').setDescription('Recharger le classement'),
+        new StringSelectMenuOptionBuilder().setLabel('🏦 Voir banque').setValue('banque').setDescription('Dernières transactions'),
+      )
+  );
+}
+
+// Ligne expirée (grisée, non cliquable)
+function createExpiredRow() {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('expired')
+      .setLabel('⏱️ Expiré — relance la commande')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(true)
+  );
+}
+
+// Attacher le collector de menu à un message avec expiration automatique
+async function attachMenuCollector(message, menuType, steamid, interaction) {
+  const collector = message.createMessageComponentCollector({
+    componentType: ComponentType.StringSelect,
+    time: MENU_TIMEOUT,
+  });
+
+  collector.on('collect', async i => {
+    // Ignorer si c'est pas l'utilisateur original
+    if (i.user.id !== interaction.user.id) {
+      await i.reply({ content: '❌ Ce menu ne t'appartient pas.', ephemeral: true });
+      return;
+    }
+
+    await i.deferUpdate();
+    const value = i.values[0];
+
+    try {
+      if (menuType === 'warns') {
+        const sid = steamid;
+        if (value === 'refresh') {
+          // Vider le cache warns pour forcer rechargement
+          delete cache[`warns:${sid}`];
+          const warns = await getPlayerWarns(sid);
+          const info  = await getPlayerInfo(sid);
+          const name  = info?.last_name || sid;
+          const { embed, row } = buildWarnsEmbed(name, sid, warns);
+          await i.editReply({ embeds: [embed], components: [row] });
+          // Réinitialiser le collector
+          collector.resetTimer();
+        } else if (value === 'joueur') {
+          const found = await findPlayer(sid);
+          if (found && found.length > 0) {
+            const { embed, row } = await buildJoueurEmbed(found[0]);
+            await i.editReply({ embeds: [embed], components: [row] });
+            collector.stop('switched');
+            attachMenuCollector(message, 'joueur', sid, interaction);
+          }
+        }
+      } else if (menuType === 'joueur') {
+        const sid = steamid;
+        if (value === 'refresh') {
+          delete cache[`player:${sid}`];
+          delete cache[`warns:${sid}`];
+          delete cache[`staff:${sid}`];
+          const found = await findPlayer(sid);
+          if (found && found.length > 0) {
+            const { embed, row } = await buildJoueurEmbed(found[0]);
+            await i.editReply({ embeds: [embed], components: [row] });
+            collector.resetTimer();
+          }
+        } else if (value === 'warns') {
+          const warns = await getPlayerWarns(sid);
+          const info  = await getPlayerInfo(sid);
+          const name  = info?.last_name || sid;
+          const { embed, row } = buildWarnsEmbed(name, sid, warns);
+          await i.editReply({ embeds: [embed], components: [row] });
+          collector.stop('switched');
+          attachMenuCollector(message, 'warns', sid, interaction);
+        } else if (value === 'contributions') {
+          const logs   = await getBankLogs();
+          const info   = await getPlayerInfo(sid);
+          const name   = info?.last_name || sid;
+          const player = logs.filter(tx => String(tx.steamid) === String(sid));
+          let dep = 0, with_ = 0;
+          player.forEach(tx => {
+            const a = Math.abs(tx.money);
+            if (tx.type === 2) dep += a; else with_ += a;
+          });
+          const embed = new EmbedBuilder()
+            .setTitle(`💰 Contributions — ${name}`)
+            .setColor(CONFIG.COLOR_GOLD)
+            .setThumbnail(LOGO_URL)
+            .setDescription(`📈 **Dépôts :** +${dep.toLocaleString('fr-FR')} €
+📉 **Retraits :** -${with_.toLocaleString('fr-FR')} €
+
+💎 **Net : ${(dep - with_).toLocaleString('fr-FR')} €**`)
+            .setTimestamp()
+            .setFooter({ text: 'Bako Family • Pika Pika ⚡', iconURL: LOGO_URL });
+          await i.editReply({ embeds: [embed], components: [createJoueurMenu(sid)] });
+          collector.resetTimer();
+        }
+      } else if (menuType === 'online') {
+        if (value === 'refresh') {
+          const data = await checkOnlineMembers();
+          if (data) await i.editReply({ embeds: [createOnlineEmbed(data)], components: [createOnlineMenu()] });
+          collector.resetTimer();
+        } else if (value === 'stats') {
+          const data = await checkOnlineMembers();
+          if (!data) return;
+          const allMembers = [...data.online, ...data.offline];
+          let list = allMembers.map(p => `${p.connected ? '🟢' : '🔴'} **${p.name}** — ${p.owner === 1 ? '👑 Chef' : p.class || 'Membre'}`).join('
+');
+          const embed = new EmbedBuilder()
+            .setTitle(`⚡ ${CONFIG.FAMILY_LABEL} — Tous les membres`)
+            .setColor(CONFIG.COLOR_INFO)
+            .setThumbnail(LOGO_URL)
+            .setDescription(list.substring(0, 4000))
+            .addFields({ name: '📊 Résumé', value: `🟢 **${data.online.length}** en ligne / 👥 **${data.total}** total` })
+            .setTimestamp()
+            .setFooter({ text: 'Bako Family • Pika Pika ⚡', iconURL: LOGO_URL });
+          await i.editReply({ embeds: [embed], components: [createOnlineMenu()] });
+          collector.resetTimer();
+        }
+      } else if (menuType === 'banque') {
+        if (value === 'refresh') {
+          delete cache['banklogs'];
+          // Re-fetch banque
+          const [bankLogs, familyInfo] = await Promise.all([getBankLogs(), getFamilyInfo()]);
+          const { embed } = await buildBanqueEmbed(bankLogs, familyInfo);
+          await i.editReply({ embeds: [embed], components: [createBanqueMenu()] });
+          collector.resetTimer();
+        } else if (value === 'classement') {
+          const bankLogs = await getBankLogs();
+          const { embed } = buildClassementEmbed(bankLogs);
+          await i.editReply({ embeds: [embed], components: [createClassementEmbed()] });
+          collector.stop('switched');
+          attachMenuCollector(message, 'classement', null, interaction);
+        }
+      } else if (menuType === 'classement') {
+        if (value === 'refresh') {
+          delete cache['banklogs'];
+          const bankLogs = await getBankLogs();
+          const { embed } = buildClassementEmbed(bankLogs);
+          await i.editReply({ embeds: [embed], components: [createClassementMenu()] });
+          collector.resetTimer();
+        } else if (value === 'banque') {
+          const [bankLogs, familyInfo] = await Promise.all([getBankLogs(), getFamilyInfo()]);
+          const { embed } = await buildBanqueEmbed(bankLogs, familyInfo);
+          await i.editReply({ embeds: [embed], components: [createBanqueMenu()] });
+          collector.stop('switched');
+          attachMenuCollector(message, 'banque', null, interaction);
+        }
+      }
+    } catch (err) {
+      console.error('❌ Erreur menu:', err.message);
+    }
+  });
+
+  collector.on('end', async (_, reason) => {
+    if (reason === 'switched') return;
+    try {
+      await message.edit({ components: [createExpiredRow()] });
+    } catch (e) {}
+  });
 }
 
 // ============================================================
@@ -537,6 +773,236 @@ function checkDailySummary() {
 // GESTION DES SLASH COMMANDS
 // ============================================================
 
+// ============================================================
+// BUILDERS — Fonctions de construction des embeds réutilisables
+// ============================================================
+
+function buildWarnsEmbed(playerName, steamid, warns) {
+  const now        = Date.now();
+  const TWO_MONTHS = 60 * 24 * 60 * 60 * 1000;
+  const activeW    = warns.filter(w => (now - new Date(w.date).getTime()) < TWO_MONTHS);
+  const oldW       = warns.filter(w => (now - new Date(w.date).getTime()) >= TWO_MONTHS);
+
+  const formatW = (w, i) => {
+    const d  = new Date(w.date);
+    const ds = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
+    return `**${i+1}.** [${w.type || 'warn'}] ${w.reason || 'Non spécifiée'} — *${ds}*`;
+  };
+
+  const embed = new EmbedBuilder()
+    .setTitle(`⚠️ Warns — ${playerName}`)
+    .setColor(activeW.length > 0 ? CONFIG.COLOR_OFFLINE : oldW.length > 0 ? 0xffa500 : 0x4caf50)
+    .setThumbnail(LOGO_URL)
+    .setTimestamp()
+    .setFooter({ text: 'Bako Family • Pika Pika ⚡', iconURL: LOGO_URL });
+
+  if (warns.length === 0) {
+    embed.setDescription('✅ Aucun avertissement actif.');
+  } else {
+    let desc = '';
+    if (activeW.length > 0) {
+      desc += `🔴 **${activeW.length}** warn(s) actif(s) :
+${activeW.map(formatW).join('
+')}`;
+    } else {
+      desc += '✅ Aucun warn actif récent';
+    }
+    if (oldW.length > 0) {
+      desc += `
+
+🟡 **${oldW.length}** oldwarn(s) (> 2 mois) :
+${oldW.map(formatW).join('
+')}`;
+    }
+    embed.setDescription(desc.substring(0, 4000));
+  }
+  embed.addFields({ name: '🎮 SteamID', value: `\`${steamid}\`` });
+
+  return { embed, row: createWarnsMenu(steamid) };
+}
+
+async function buildJoueurEmbed(player) {
+  const { steamid, inFamily, class: memberRole } = player;
+
+  const [playerInfo, warns, staffInfo, bankLogs] = await Promise.all([
+    getPlayerInfo(steamid),
+    getPlayerWarns(steamid),
+    isStaff(steamid),
+    inFamily ? getBankLogs() : Promise.resolve([]),
+  ]);
+
+  let totalDep = 0, totalWith = 0;
+  if (inFamily) {
+    bankLogs.filter(tx => String(tx.steamid) === String(steamid)).forEach(tx => {
+      const a = Math.abs(tx.money);
+      if (tx.type === 2) totalDep += a; else totalWith += a;
+    });
+  }
+
+  const connected     = playerInfo?.connected || false;
+  const staffRankId   = staffInfo?.rank_staff;
+  const staffRankName = staffRankId ? (STAFF_RANKS[staffRankId] || `Rang ${staffRankId}`) : null;
+  const staff         = staffInfo?.is_staff ? `✅ ${staffRankName}` : '❌ Non staff';
+  const roleStr       = !inFamily ? '👤 Hors famille Bako'
+    : (memberRole === 'owner' || playerInfo?.owner === 1 ? '👑 Chef de famille' : `👤 ${memberRole || 'Membre'}`);
+  const playerName    = playerInfo?.last_name || steamid;
+
+  const now        = Date.now();
+  const TWO_MONTHS = 60 * 24 * 60 * 60 * 1000;
+  const activeWarns = warns.filter(w => (now - new Date(w.date).getTime()) < TWO_MONTHS);
+  const oldWarns    = warns.filter(w => (now - new Date(w.date).getTime()) >= TWO_MONTHS);
+
+  const formatWarn = (w, i) => {
+    const d  = new Date(w.date);
+    const ds = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
+    return `**${i+1}.** [${w.type || 'warn'}] ${w.reason || 'Non précisée'} — *${ds}*`;
+  };
+
+  let warnsValue;
+  if (warns.length === 0) {
+    warnsValue = '✅ Aucun avertissement actif';
+  } else {
+    if (activeWarns.length > 0) {
+      warnsValue = `🔴 **${activeWarns.length}** warn(s) actif(s) :
+${activeWarns.slice(0,5).map(formatWarn).join('
+')}`;
+      if (activeWarns.length > 5) warnsValue += `
+*...et ${activeWarns.length - 5} de plus*`;
+    } else {
+      warnsValue = '✅ Aucun warn actif récent';
+    }
+    if (oldWarns.length > 0) {
+      warnsValue += `
+
+🟡 **${oldWarns.length}** oldwarn(s) (> 2 mois) :
+${oldWarns.slice(0,3).map(formatWarn).join('
+')}`;
+      if (oldWarns.length > 3) warnsValue += `
+*...et ${oldWarns.length - 3} de plus*`;
+    }
+  }
+
+  const embed = new EmbedBuilder()
+    .setTitle(`👤 ${playerName}`)
+    .setColor(connected ? CONFIG.COLOR_ONLINE : CONFIG.COLOR_OFFLINE)
+    .setThumbnail(LOGO_URL)
+    .addFields(
+      { name: '📊 Statut',  value: `${connected ? '🟢 En ligne' : '🔴 Hors ligne'}
+${roleStr}
+${staff}`, inline: true },
+      { name: '🪙 Coins',   value: `**${(playerInfo?.coins || 0).toLocaleString('fr-FR')}**`, inline: true },
+      { name: '⚠️ Warns',   value: warnsValue },
+      { name: '🎮 SteamID', value: `\`${steamid}\`` }
+    )
+    .setTimestamp();
+
+  if (inFamily) {
+    embed.addFields({
+      name: '💰 Contributions Bako',
+      value: `📈 +${totalDep.toLocaleString('fr-FR')} €
+📉 -${totalWith.toLocaleString('fr-FR')} €
+Net: **${(totalDep - totalWith).toLocaleString('fr-FR')} €**`,
+      inline: true,
+    });
+  }
+  if (playerInfo?.discordid) {
+    embed.addFields({ name: '💬 Discord', value: `<@${playerInfo.discordid}>`, inline: true });
+  }
+  embed.setFooter({ text: inFamily ? '⚡ Membre de la Bako' : '🔍 Joueur hors famille', iconURL: LOGO_URL });
+
+  return { embed, row: createJoueurMenu(steamid) };
+}
+
+async function buildBanqueEmbed(bankLogs, familyInfo) {
+  const recent      = bankLogs.slice(0, 10);
+  const recentNames = {};
+  for (const tx of recent) {
+    if (!recentNames[tx.steamid]) {
+      const info = await getPlayerInfo(tx.steamid);
+      recentNames[tx.steamid] = info?.last_name || tx.steamid;
+    }
+  }
+  const recentList = recent.map(tx => {
+    const name   = recentNames[tx.steamid];
+    const amount = Math.abs(tx.money);
+    const icon   = tx.type === 2 ? '📈' : '📉';
+    const sign   = tx.type === 2 ? '+' : '-';
+    const d      = new Date(tx.date);
+    const ds     = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
+    return `${icon} **${sign}${amount.toLocaleString('fr-FR')} €** — ${name} *(${ds})*`;
+  }).join('
+');
+
+  const playerTotals = {};
+  bankLogs.forEach(tx => {
+    if (!playerTotals[tx.steamid]) playerTotals[tx.steamid] = { deposits: 0, withdrawals: 0 };
+    const amount = Math.abs(tx.money);
+    if (tx.type === 2) playerTotals[tx.steamid].deposits += amount;
+    else playerTotals[tx.steamid].withdrawals += amount;
+  });
+
+  const topDep    = Object.entries(playerTotals).sort((a,b) => b[1].deposits - a[1].deposits).slice(0,5);
+  const topWith   = Object.entries(playerTotals).sort((a,b) => b[1].withdrawals - a[1].withdrawals).slice(0,5);
+  const allTopIds = [...new Set([...topDep.map(t => t[0]), ...topWith.map(t => t[0])])];
+  const topNames  = {};
+  for (const sid of allTopIds) {
+    topNames[sid] = (await getPlayerInfo(sid))?.last_name || sid;
+  }
+  const medals     = ['🥇','🥈','🥉','4️⃣','5️⃣'];
+  const topDepList  = topDep.map((t,i)  => `${medals[i]} **${topNames[t[0]]}** — +${t[1].deposits.toLocaleString('fr-FR')} €`).join('
+');
+  const topWithList = topWith.map((t,i) => `${medals[i]} **${topNames[t[0]]}** — -${t[1].withdrawals.toLocaleString('fr-FR')} €`).join('
+');
+
+  const embed = new EmbedBuilder()
+    .setTitle(`🏦 ${CONFIG.FAMILY_LABEL} — Banque`)
+    .setColor(CONFIG.COLOR_INFO)
+    .setThumbnail(LOGO_URL)
+    .setTimestamp()
+    .setFooter({ text: 'Bako Family • Pika Pika ⚡', iconURL: LOGO_URL });
+  if (familyInfo) embed.setDescription(`💰 **Solde :** ${familyInfo.money?.toLocaleString('fr-FR')} €`);
+  embed.addFields(
+    { name: '📜 10 dernières transactions', value: recentList.substring(0, 1024) },
+    { name: '🏆 Top Déposants',             value: topDepList.substring(0, 1024),  inline: true },
+    { name: '💸 Top Retraits',              value: topWithList.substring(0, 1024), inline: true }
+  );
+  return { embed };
+}
+
+async function buildClassementEmbed(bankLogs) {
+  const playerTotals = {};
+  bankLogs.forEach(tx => {
+    if (!playerTotals[tx.steamid]) playerTotals[tx.steamid] = { deposits: 0, withdrawals: 0, transactions: 0 };
+    const amount = Math.abs(tx.money);
+    if (tx.type === 2) playerTotals[tx.steamid].deposits += amount;
+    else playerTotals[tx.steamid].withdrawals += amount;
+    playerTotals[tx.steamid].transactions++;
+  });
+  const sorted = Object.entries(playerTotals)
+    .map(([steamid, s]) => ({ steamid, net: s.deposits - s.withdrawals, transactions: s.transactions }))
+    .sort((a,b) => b.net - a.net).slice(0, 15);
+  const names = {};
+  for (const e of sorted) {
+    const info = await getPlayerInfo(e.steamid);
+    names[e.steamid] = info?.last_name || e.steamid;
+  }
+  const medals = ['🥇','🥈','🥉'];
+  const list   = sorted.map((p,i) => {
+    const medal = i < 3 ? medals[i] : `**${i+1}.**`;
+    const sign  = p.net >= 0 ? '+' : '';
+    return `${medal} **${names[p.steamid]}** — ${sign}${p.net.toLocaleString('fr-FR')} € *(${p.transactions} tx)*`;
+  }).join('
+');
+  const embed = new EmbedBuilder()
+    .setTitle(`🏆 ${CONFIG.FAMILY_LABEL} — Classement contributeurs`)
+    .setColor(CONFIG.COLOR_GOLD)
+    .setThumbnail(LOGO_URL)
+    .setDescription(list.substring(0, 4000))
+    .setTimestamp()
+    .setFooter({ text: 'Bako Family • Pika Pika ⚡ | Trié par dépôts nets', iconURL: LOGO_URL });
+  return { embed };
+}
+
 client.on('interactionCreate', async interaction => {
   if (!interaction.isChatInputCommand()) return;
   const { commandName } = interaction;
@@ -546,7 +1012,8 @@ client.on('interactionCreate', async interaction => {
     await interaction.deferReply();
     const data = await checkOnlineMembers();
     if (!data) { await interaction.editReply('❌ Impossible de récupérer les données.'); return; }
-    await interaction.editReply({ embeds: [createOnlineEmbed(data)] });
+    const msg = await interaction.editReply({ embeds: [createOnlineEmbed(data)], components: [createOnlineMenu()] });
+    attachMenuCollector(msg, 'online', null, interaction);
   }
 
   // ═══════════════════════ /stats ═════════════════════════════
@@ -598,60 +1065,9 @@ client.on('interactionCreate', async interaction => {
     await interaction.deferReply();
     const [bankLogs, familyInfo] = await Promise.all([getBankLogs(), getFamilyInfo()]);
     if (!bankLogs || bankLogs.length === 0) { await interaction.editReply('❌ Aucune transaction trouvée.'); return; }
-
-    const recent      = bankLogs.slice(0, 10);
-    const recentNames = {};
-    for (const tx of recent) {
-      if (!recentNames[tx.steamid]) {
-        const info = await getPlayerInfo(tx.steamid);
-        recentNames[tx.steamid] = info?.last_name || tx.steamid;
-      }
-    }
-
-    const recentList = recent.map(tx => {
-      const name   = recentNames[tx.steamid];
-      const amount = Math.abs(tx.money);
-      const icon   = tx.type === 2 ? '📈' : '📉';
-      const sign   = tx.type === 2 ? '+' : '-';
-      const d      = new Date(tx.date);
-      const ds     = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
-      return `${icon} **${sign}${amount.toLocaleString('fr-FR')} €** — ${name} *(${ds})*`;
-    }).join('\n');
-
-    const playerTotals = {};
-    bankLogs.forEach(tx => {
-      if (!playerTotals[tx.steamid]) playerTotals[tx.steamid] = { deposits: 0, withdrawals: 0 };
-      const amount = Math.abs(tx.money);
-      if (tx.type === 2) playerTotals[tx.steamid].deposits += amount;
-      else playerTotals[tx.steamid].withdrawals += amount;
-    });
-
-    const topDep  = Object.entries(playerTotals).sort((a,b) => b[1].deposits - a[1].deposits).slice(0, 5);
-    const topWith = Object.entries(playerTotals).sort((a,b) => b[1].withdrawals - a[1].withdrawals).slice(0, 5);
-    const allTopIds = [...new Set([...topDep.map(t => t[0]), ...topWith.map(t => t[0])])];
-
-    const topNames = {};
-    for (const sid of allTopIds) {
-      topNames[sid] = recentNames[sid] || (await getPlayerInfo(sid))?.last_name || sid;
-    }
-
-    const medals     = ['🥇','🥈','🥉','4️⃣','5️⃣'];
-    const topDepList  = topDep.map((t,i)  => `${medals[i]} **${topNames[t[0]]}** — +${t[1].deposits.toLocaleString('fr-FR')} €`).join('\n');
-    const topWithList = topWith.map((t,i) => `${medals[i]} **${topNames[t[0]]}** — -${t[1].withdrawals.toLocaleString('fr-FR')} €`).join('\n');
-
-    const embed = new EmbedBuilder()
-      .setTitle(`🏦 ${CONFIG.FAMILY_LABEL} — Banque`)
-      .setColor(CONFIG.COLOR_INFO)
-      .setThumbnail(LOGO_URL)
-      .setTimestamp()
-      .setFooter({ text: 'Bako Family • Pika Pika ⚡', iconURL: LOGO_URL });
-    if (familyInfo) embed.setDescription(`💰 **Solde :** ${familyInfo.money?.toLocaleString('fr-FR')} €`);
-    embed.addFields(
-      { name: '📜 10 dernières transactions', value: recentList.substring(0, 1024) },
-      { name: '🏆 Top Déposants',             value: topDepList.substring(0, 1024),  inline: true },
-      { name: '💸 Top Retraits',              value: topWithList.substring(0, 1024), inline: true }
-    );
-    await interaction.editReply({ embeds: [embed] });
+    const { embed } = await buildBanqueEmbed(bankLogs, familyInfo);
+    const msg        = await interaction.editReply({ embeds: [embed], components: [createBanqueMenu()] });
+    attachMenuCollector(msg, 'banque', null, interaction);
   }
 
   // ═══════════════════════ /classement ════════════════════════
@@ -659,42 +1075,9 @@ client.on('interactionCreate', async interaction => {
     await interaction.deferReply();
     const bankLogs = await getBankLogs();
     if (!bankLogs || bankLogs.length === 0) { await interaction.editReply('❌ Aucune transaction trouvée.'); return; }
-
-    const playerTotals = {};
-    bankLogs.forEach(tx => {
-      if (!playerTotals[tx.steamid]) playerTotals[tx.steamid] = { deposits: 0, withdrawals: 0, transactions: 0 };
-      const amount = Math.abs(tx.money);
-      if (tx.type === 2) playerTotals[tx.steamid].deposits += amount;
-      else playerTotals[tx.steamid].withdrawals += amount;
-      playerTotals[tx.steamid].transactions++;
-    });
-
-    const sorted = Object.entries(playerTotals)
-      .map(([steamid, s]) => ({ steamid, net: s.deposits - s.withdrawals, transactions: s.transactions }))
-      .sort((a,b) => b.net - a.net)
-      .slice(0, 15);
-
-    const names = {};
-    for (const e of sorted) {
-      const info = await getPlayerInfo(e.steamid);
-      names[e.steamid] = info?.last_name || e.steamid;
-    }
-
-    const medals = ['🥇','🥈','🥉'];
-    const list   = sorted.map((p,i) => {
-      const medal = i < 3 ? medals[i] : `**${i+1}.**`;
-      const sign  = p.net >= 0 ? '+' : '';
-      return `${medal} **${names[p.steamid]}** — ${sign}${p.net.toLocaleString('fr-FR')} € *(${p.transactions} tx)*`;
-    }).join('\n');
-
-    const embed = new EmbedBuilder()
-      .setTitle(`🏆 ${CONFIG.FAMILY_LABEL} — Classement contributeurs`)
-      .setColor(CONFIG.COLOR_GOLD)
-      .setThumbnail(LOGO_URL)
-      .setDescription(list.substring(0, 4000))
-      .setTimestamp()
-      .setFooter({ text: 'Bako Family • Pika Pika ⚡ | Trié par dépôts nets', iconURL: LOGO_URL });
-    await interaction.editReply({ embeds: [embed] });
+    const { embed } = await buildClassementEmbed(bankLogs);
+    const msg        = await interaction.editReply({ embeds: [embed], components: [createClassementMenu()] });
+    attachMenuCollector(msg, 'classement', null, interaction);
   }
 
   // ═══════════════════════ /joueur ════════════════════════════
@@ -744,103 +1127,13 @@ client.on('interactionCreate', async interaction => {
       memberRole = found[0].class;
     }
 
-    // Récupérer toutes les infos en parallèle
-    const [playerInfo, warns, staffInfo, bankLogs] = await Promise.all([
-      getPlayerInfo(steamid),
-      getPlayerWarns(steamid),
-      isStaff(steamid),
-      inFamily ? getBankLogs() : Promise.resolve([]),
-    ]);
-
-    // Calcul des transactions bancaires (famille seulement)
-    let totalDep = 0, totalWith = 0;
-    if (inFamily) {
-      const playerLogs = bankLogs.filter(tx => String(tx.steamid) === String(steamid));
-      if (playerLogs.length === 0) {
-        console.log(`⚠️ Aucune transaction trouvée pour ${steamid} — l'API banklogs est peut-être paginée`);
-      }
-      playerLogs.forEach(tx => {
-        const amount = Math.abs(tx.money);
-        if (tx.type === 2) totalDep += amount; else totalWith += amount;
-      });
-    }
-
-    // Construction de l'embed
-    const connected = playerInfo?.connected || false;
-    const status    = connected ? '🟢 En ligne' : '🔴 Hors ligne';
-    const staffRankId   = staffInfo?.rank_staff;
-    const staffRankName = staffRankId ? (STAFF_RANKS[staffRankId] || `Rang ${staffRankId}`) : null;
-    const staff         = staffInfo?.is_staff ? `✅ ${staffRankName}` : '❌ Non staff';
-
-    // Rôle dans la famille
-    let roleStr = '👤 Hors famille Bako';
-    if (inFamily) {
-      roleStr = memberRole === 'owner' || playerInfo?.owner === 1 ? '👑 Chef de famille' : `👤 ${memberRole || 'Membre'}`;
-    }
-
-    // Section warns — séparer actifs (<2 mois) et anciens (>2 mois)
-    const now         = Date.now();
-    const TWO_MONTHS  = 60 * 24 * 60 * 60 * 1000; // 60 jours en ms
-    const activeWarns = warns.filter(w => (now - new Date(w.date).getTime()) < TWO_MONTHS);
-    const oldWarns    = warns.filter(w => (now - new Date(w.date).getTime()) >= TWO_MONTHS);
-
-    let warnsValue;
-    if (warns.length === 0) {
-      warnsValue = '✅ Aucun avertissement actif';
-    } else {
-      const formatWarn = (w, i) => {
-        const d  = new Date(w.date);
-        const ds = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
-        return `**${i+1}.** [${w.type || 'warn'}] ${w.reason || 'Non précisée'} — *${ds}*`;
-      };
-
-      if (activeWarns.length > 0) {
-        const list = activeWarns.slice(0, 5).map(formatWarn).join('\n');
-        warnsValue = `🔴 **${activeWarns.length}** warn(s) actif(s) :\n${list}`;
-        if (activeWarns.length > 5) warnsValue += `\n*...et ${activeWarns.length - 5} de plus*`;
-      } else {
-        warnsValue = '✅ Aucun warn actif récent';
-      }
-
-      if (oldWarns.length > 0) {
-        const oldList = oldWarns.slice(0, 3).map(formatWarn).join('\n');
-        warnsValue += `\n\n🟡 **${oldWarns.length}** oldwarn(s) (> 2 mois) :\n${oldList}`;
-        if (oldWarns.length > 3) warnsValue += `\n*...et ${oldWarns.length - 3} de plus*`;
-      }
-    }
-
-    const embed = new EmbedBuilder()
-      .setTitle(`👤 ${playerName}`)
-      .setColor(connected ? CONFIG.COLOR_ONLINE : CONFIG.COLOR_OFFLINE)
-      .setThumbnail(LOGO_URL)
-      .addFields(
-        { name: '📊 Statut',  value: `${status}\n${roleStr}\n${staff}`, inline: true },
-        { name: '🪙 Coins',   value: `**${(playerInfo?.coins || 0).toLocaleString('fr-FR')}**`, inline: true },
-        { name: '⚠️ Warns',   value: warnsValue },
-        { name: '🎮 SteamID', value: `\`${steamid}\`` }
-      )
-      .setTimestamp();
-
-    // Infos bancaires famille uniquement
-    if (inFamily) {
-      embed.addFields({
-        name: '💰 Contributions Bako',
-        value: `📈 +${totalDep.toLocaleString('fr-FR')} €\n📉 -${totalWith.toLocaleString('fr-FR')} €\nNet: **${(totalDep - totalWith).toLocaleString('fr-FR')} €**`,
-        inline: true,
-      });
-    }
-
-    if (playerInfo?.discordid) {
-      embed.addFields({ name: '💬 Discord', value: `<@${playerInfo.discordid}>`, inline: true });
-    }
-
-    embed.setFooter({ text: inFamily ? '⚡ Membre de la Bako' : '🔍 Joueur hors famille', iconURL: LOGO_URL });
-
-    await interaction.editReply({ embeds: [embed] });
+    const playerObj      = { steamid, inFamily, class: memberRole };
+    const { embed, row } = await buildJoueurEmbed(playerObj);
+    const msg            = await interaction.editReply({ embeds: [embed], components: [row] });
+    attachMenuCollector(msg, 'joueur', steamid, interaction);
   }
 
   // ═══════════════════════ /warns ═════════════════════════════
-  // Fonctionne pour N'IMPORTE QUEL joueur du serveur
   if (commandName === 'warns') {
     await interaction.deferReply();
     const search = interaction.options.getString('nom');
@@ -849,69 +1142,27 @@ client.on('interactionCreate', async interaction => {
     let playerName = search;
 
     if (/^7656\d{13}$/.test(search)) {
-      // SteamID direct → n'importe quel joueur
       steamid = search;
       const info = await getPlayerInfo(steamid);
       playerName = info?.last_name || steamid;
     } else {
-      // Recherche par nom dans la famille
       const found = await findPlayer(search);
       if (!found || found.length === 0) {
-        await interaction.editReply(
-          `❌ Aucun membre de la Bako trouvé pour **"${search}"**.\n` +
-          `💡 Pour un joueur hors famille, utilise son **SteamID64** directement.`
-        );
+        await interaction.editReply(`❌ Aucun membre de la Bako trouvé pour **"${search}"**.\n💡 Pour un joueur hors famille, utilise son **SteamID64** directement.`);
         return;
       }
       if (found.length > 1) {
-        const list = found.map(p => `• **${p.name}** (\`${p.steamid}\`)`).join('\n');
-        await interaction.editReply(`⚠️ Plusieurs résultats :\n${list}`);
+        await interaction.editReply(`⚠️ Plusieurs résultats :\n${found.map(p => `• **${p.name}** (\`${p.steamid}\`)`).join('\n')}`);
         return;
       }
       steamid    = found[0].steamid;
       playerName = found[0].name;
     }
 
-    const warns = await getPlayerWarns(steamid);
-
-    const embed = new EmbedBuilder()
-      .setTitle(`⚠️ Warns — ${playerName}`)
-      .setColor(warns.length > 0 ? CONFIG.COLOR_OFFLINE : 0x4caf50)
-      .setThumbnail(LOGO_URL)
-      .setTimestamp()
-      .setFooter({ text: 'Bako Family • Pika Pika ⚡', iconURL: LOGO_URL });
-
-    const now2        = Date.now();
-    const TWO_MONTHS2 = 60 * 24 * 60 * 60 * 1000;
-    const activeW     = warns.filter(w => (now2 - new Date(w.date).getTime()) < TWO_MONTHS2);
-    const oldW        = warns.filter(w => (now2 - new Date(w.date).getTime()) >= TWO_MONTHS2);
-
-    const formatW = (w, i) => {
-      const d  = new Date(w.date);
-      const ds = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
-      return `**${i+1}.** [${w.type || 'warn'}] ${w.reason || 'Non spécifiée'} — *${ds}*`;
-    };
-
-    // Couleur selon warns actifs
-    embed.setColor(activeW.length > 0 ? CONFIG.COLOR_OFFLINE : oldW.length > 0 ? 0xffa500 : 0x4caf50);
-
-    if (warns.length === 0) {
-      embed.setDescription('✅ Aucun avertissement actif.');
-    } else {
-      let desc = '';
-      if (activeW.length > 0) {
-        desc += `🔴 **${activeW.length}** warn(s) actif(s) :\n${activeW.map(formatW).join('\n')}`;
-      } else {
-        desc += '✅ Aucun warn actif récent';
-      }
-      if (oldW.length > 0) {
-        desc += `\n\n🟡 **${oldW.length}** oldwarn(s) (> 2 mois) :\n${oldW.map(formatW).join('\n')}`;
-      }
-      embed.setDescription(desc.substring(0, 4000));
-    }
-
-    embed.addFields({ name: '🎮 SteamID', value: `\`${steamid}\`` });
-    await interaction.editReply({ embeds: [embed] });
+    const warns           = await getPlayerWarns(steamid);
+    const { embed, row }  = buildWarnsEmbed(playerName, steamid, warns);
+    const msg             = await interaction.editReply({ embeds: [embed], components: [row] });
+    attachMenuCollector(msg, 'warns', steamid, interaction);
   }
 
   // ═══════════════════════ /refresh ═══════════════════════════
