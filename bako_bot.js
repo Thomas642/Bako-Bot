@@ -250,7 +250,7 @@ async function attachMenuCollector(message, menuType, steamid, interaction) {
   collector.on('collect', async i => {
     // Ignorer si c'est pas l'utilisateur original
     if (i.user.id !== interaction.user.id) {
-      await i.reply({ content: '❌ Ce menu ne t'appartient pas.', ephemeral: true });
+      await i.reply({ content: "❌ Ce menu ne t'appartient pas.", ephemeral: true });
       return;
     }
 
@@ -331,8 +331,7 @@ async function attachMenuCollector(message, menuType, steamid, interaction) {
           const data = await checkOnlineMembers();
           if (!data) return;
           const allMembers = [...data.online, ...data.offline];
-          let list = allMembers.map(p => `${p.connected ? '🟢' : '🔴'} **${p.name}** — ${p.owner === 1 ? '👑 Chef' : p.class || 'Membre'}`).join('
-');
+          let list = allMembers.map(p => `${p.connected ? '🟢' : '🔴'} **${p.name}** — ${p.owner === 1 ? '👑 Chef' : p.class || 'Membre'}`).join('\n');
           const embed = new EmbedBuilder()
             .setTitle(`⚡ ${CONFIG.FAMILY_LABEL} — Tous les membres`)
             .setColor(CONFIG.COLOR_INFO)
@@ -802,8 +801,7 @@ function buildWarnsEmbed(playerName, steamid, warns) {
     let desc = '';
     if (activeW.length > 0) {
       desc += `🔴 **${activeW.length}** warn(s) actif(s) :
-${activeW.map(formatW).join('
-')}`;
+${activeW.map(formatW).join('\n')}`;
     } else {
       desc += '✅ Aucun warn actif récent';
     }
@@ -811,8 +809,7 @@ ${activeW.map(formatW).join('
       desc += `
 
 🟡 **${oldW.length}** oldwarn(s) (> 2 mois) :
-${oldW.map(formatW).join('
-')}`;
+${oldW.map(formatW).join('\n')}`;
     }
     embed.setDescription(desc.substring(0, 4000));
   }
@@ -864,8 +861,7 @@ async function buildJoueurEmbed(player) {
   } else {
     if (activeWarns.length > 0) {
       warnsValue = `🔴 **${activeWarns.length}** warn(s) actif(s) :
-${activeWarns.slice(0,5).map(formatWarn).join('
-')}`;
+${activeWarns.slice(0,5).map(formatWarn).join('\n')}`;
       if (activeWarns.length > 5) warnsValue += `
 *...et ${activeWarns.length - 5} de plus*`;
     } else {
@@ -875,8 +871,7 @@ ${activeWarns.slice(0,5).map(formatWarn).join('
       warnsValue += `
 
 🟡 **${oldWarns.length}** oldwarn(s) (> 2 mois) :
-${oldWarns.slice(0,3).map(formatWarn).join('
-')}`;
+${oldWarns.slice(0,3).map(formatWarn).join('\n')}`;
       if (oldWarns.length > 3) warnsValue += `
 *...et ${oldWarns.length - 3} de plus*`;
     }
@@ -930,8 +925,7 @@ async function buildBanqueEmbed(bankLogs, familyInfo) {
     const d      = new Date(tx.date);
     const ds     = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
     return `${icon} **${sign}${amount.toLocaleString('fr-FR')} €** — ${name} *(${ds})*`;
-  }).join('
-');
+  }).join('\n');
 
   const playerTotals = {};
   bankLogs.forEach(tx => {
@@ -949,10 +943,8 @@ async function buildBanqueEmbed(bankLogs, familyInfo) {
     topNames[sid] = (await getPlayerInfo(sid))?.last_name || sid;
   }
   const medals     = ['🥇','🥈','🥉','4️⃣','5️⃣'];
-  const topDepList  = topDep.map((t,i)  => `${medals[i]} **${topNames[t[0]]}** — +${t[1].deposits.toLocaleString('fr-FR')} €`).join('
-');
-  const topWithList = topWith.map((t,i) => `${medals[i]} **${topNames[t[0]]}** — -${t[1].withdrawals.toLocaleString('fr-FR')} €`).join('
-');
+  const topDepList  = topDep.map((t,i)  => `${medals[i]} **${topNames[t[0]]}** — +${t[1].deposits.toLocaleString('fr-FR')} €`).join('\n');
+  const topWithList = topWith.map((t,i) => `${medals[i]} **${topNames[t[0]]}** — -${t[1].withdrawals.toLocaleString('fr-FR')} €`).join('\n');
 
   const embed = new EmbedBuilder()
     .setTitle(`🏦 ${CONFIG.FAMILY_LABEL} — Banque`)
@@ -991,8 +983,7 @@ async function buildClassementEmbed(bankLogs) {
     const medal = i < 3 ? medals[i] : `**${i+1}.**`;
     const sign  = p.net >= 0 ? '+' : '';
     return `${medal} **${names[p.steamid]}** — ${sign}${p.net.toLocaleString('fr-FR')} € *(${p.transactions} tx)*`;
-  }).join('
-');
+  }).join('\n');
   const embed = new EmbedBuilder()
     .setTitle(`🏆 ${CONFIG.FAMILY_LABEL} — Classement contributeurs`)
     .setColor(CONFIG.COLOR_GOLD)
