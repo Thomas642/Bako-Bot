@@ -179,9 +179,17 @@ async function apiCall(endpoint) {
           // Récupérer le texte brut AVANT JSON.parse
           // JSON.parse arrondit les grands entiers (Discord IDs 64-bit)
           // On remplace "discordid": 123456789 par "discordid": "123456789" avant parsing
-          const text    = await response.text();
-          const fixed   = text.replace(/"discordid"\s*:\s*(\d{10,})/g, '"discordid":"$1"');
-          resolve(JSON.parse(fixed));
+          const text  = await response.text();
+          // Protéger TOUS les grands entiers avant JSON.parse (Discord IDs, SteamIDs)
+          // JSON.parse perd la précision sur les entiers > 2^53
+          const fixed = text.replace(/:\s*(\d{15,})/g, ':"$1"');
+          try {
+            resolve(JSON.parse(fixed));
+          } catch(e) {
+            // Fallback si le remplacement casse le JSON
+            console.warn(`⚠️ JSON fix échoué sur ${endpoint}, fallback brut`);
+            resolve(JSON.parse(text));
+          }
         } else {
           console.error(`❌ API ${endpoint}: ${response.status}`);
           resolve(null);
@@ -236,9 +244,10 @@ async function getBankLogs() {
   let hasMore = true;
 
   while (hasMore) {
-    // Tenter avec paramètre page (si l'API le supporte)
+    // Tenter avec offset (page-1)*limit pour les APIs style offset/limit
+    const offset = (page - 1) * limit;
     const result = await apiCall(
-      `/darkrp/familles/${encodeURIComponent(CONFIG.FAMILY_NAME)}/banklogs?page=${page}&limit=${limit}`
+      `/darkrp/familles/${encodeURIComponent(CONFIG.FAMILY_NAME)}/banklogs?page=${page}&limit=${limit}&offset=${offset}`
     );
     const batch = result?.data || [];
 
@@ -295,19 +304,24 @@ async function isStaff(steamid) {
 // ============================================================
 
 async function findPlayer(search) {
-  // Cas 1 : SteamID64 direct → n'importe quel joueur du serveur
+  // Cas 1 : SteamID64 direct → vérifier si dans la famille aussi
   if (/^7656\d{13}$/.test(search)) {
-    const info = await getPlayerInfo(search);
+    const [info, members] = await Promise.all([
+      getPlayerInfo(search),
+      getFamilyMembers(),
+    ]);
     if (info) {
+      // Vérifier si ce SteamID est un membre de la famille
+      const memberData = members.find(m => String(m.steamid) === String(search));
       return [{
         steamid:   search,
         name:      info.last_name || search,
-        class:     null,
-        owner:     null,
+        class:     memberData?.class || null,
+        owner:     memberData?.owner || null,
         discordid: info.discordid || null,
         coins:     info.coins || 0,
         connected: info.connected || false,
-        inFamily:  false,
+        inFamily:  !!memberData,
       }];
     }
     return [];
