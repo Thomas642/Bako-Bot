@@ -306,8 +306,11 @@ async function findPlayer(search) {
       getFamilyMembers(),
     ]);
     if (info) {
-      // Vérifier si ce SteamID est un membre de la famille
-      const memberData = members.find(m => String(m.steamid) === String(search));
+      // Debug : afficher les SteamIDs de la famille pour comparer
+      console.log(`🔍 Recherche SteamID: "${search}" (type: ${typeof search})`);
+      console.log(`👥 Membres famille (${members.length}) :`, members.slice(0,3).map(m => `"${m.steamid}" (${typeof m.steamid})`).join(', '));
+      const memberData = members.find(m => String(m.steamid).trim() === String(search).trim());
+      console.log(`✅ Trouvé dans famille : ${!!memberData}`);
       return [{
         steamid:   search,
         name:      info.last_name || search,
