@@ -778,18 +778,35 @@ client.on('interactionCreate', async interaction => {
       roleStr = memberRole === 'owner' || playerInfo?.owner === 1 ? '👑 Chef de famille' : `👤 ${memberRole || 'Membre'}`;
     }
 
-    // Section warns
+    // Section warns — séparer actifs (<2 mois) et anciens (>2 mois)
+    const now         = Date.now();
+    const TWO_MONTHS  = 60 * 24 * 60 * 60 * 1000; // 60 jours en ms
+    const activeWarns = warns.filter(w => (now - new Date(w.date).getTime()) < TWO_MONTHS);
+    const oldWarns    = warns.filter(w => (now - new Date(w.date).getTime()) >= TWO_MONTHS);
+
     let warnsValue;
     if (warns.length === 0) {
       warnsValue = '✅ Aucun avertissement actif';
     } else {
-      const warnList = warns.slice(0, 5).map((w, i) => {
+      const formatWarn = (w, i) => {
         const d  = new Date(w.date);
         const ds = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
         return `**${i+1}.** [${w.type || 'warn'}] ${w.reason || 'Non précisée'} — *${ds}*`;
-      }).join('\n');
-      warnsValue = `**${warns.length}** warn(s) actif(s) :\n${warnList}`;
-      if (warns.length > 5) warnsValue += `\n*...et ${warns.length - 5} de plus*`;
+      };
+
+      if (activeWarns.length > 0) {
+        const list = activeWarns.slice(0, 5).map(formatWarn).join('\n');
+        warnsValue = `🔴 **${activeWarns.length}** warn(s) actif(s) :\n${list}`;
+        if (activeWarns.length > 5) warnsValue += `\n*...et ${activeWarns.length - 5} de plus*`;
+      } else {
+        warnsValue = '✅ Aucun warn actif récent';
+      }
+
+      if (oldWarns.length > 0) {
+        const oldList = oldWarns.slice(0, 3).map(formatWarn).join('\n');
+        warnsValue += `\n\n🟡 **${oldWarns.length}** oldwarn(s) (> 2 mois) :\n${oldList}`;
+        if (oldWarns.length > 3) warnsValue += `\n*...et ${oldWarns.length - 3} de plus*`;
+      }
     }
 
     const embed = new EmbedBuilder()
