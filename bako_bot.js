@@ -35,7 +35,7 @@ const STAFF_RANKS = {
 };
 
 // ============================================================
-// CONFIGURATION — À MODIFIER
+// CONFIGURATION - À MODIFIER
 // ============================================================
 
 const CONFIG = {
@@ -158,7 +158,7 @@ function clearCache() {
 }
 
 // ============================================================
-// MENUS INTERACTIFS — Gestion expiration 10 min
+// MENUS INTERACTIFS - Gestion expiration 10 min
 // ============================================================
 
 const MENU_TIMEOUT = 10 * 60 * 1000; // 10 minutes
@@ -304,7 +304,7 @@ async function attachMenuCollector(message, menuType, steamid, interaction) {
             if (tx.type === 2) dep += a; else with_ += a;
           });
           const embed = new EmbedBuilder()
-            .setTitle(`💰 Contributions — ${name}`)
+            .setTitle(`💰 Contributions | ${name}`)
             .setColor(CONFIG.COLOR_GOLD)
             .setThumbnail(LOGO_URL)
             .setDescription(`📈 **Dépôts :** +${dep.toLocaleString('fr-FR')} €
@@ -325,9 +325,9 @@ async function attachMenuCollector(message, menuType, steamid, interaction) {
           const data = await checkOnlineMembers();
           if (!data) return;
           const allMembers = [...data.online, ...data.offline];
-          let list = allMembers.map(p => `${p.connected ? '🟢' : '🔴'} **${p.name}** — ${p.owner === 1 ? '👑 Chef' : p.class || 'Membre'}`).join('\n');
+          let list = allMembers.map(p => `${p.connected ? '🟢' : '🔴'} **${p.name}** - ${p.owner === 1 ? '👑 Chef' : p.class || 'Membre'}`).join('\n');
           const embed = new EmbedBuilder()
-            .setTitle(`⚡ ${CONFIG.FAMILY_LABEL} — Tous les membres`)
+            .setTitle(`⚡ ${CONFIG.FAMILY_LABEL} - Tous les membres`)
             .setColor(CONFIG.COLOR_INFO)
             .setThumbnail(LOGO_URL)
             .setDescription(list.substring(0, 4000))
@@ -378,6 +378,16 @@ async function attachMenuCollector(message, menuType, steamid, interaction) {
       await message.edit({ components: [createExpiredRow()] });
     } catch (e) {}
   });
+
+  // Intercepter les clics après expiration du collector
+  const expiredCollector = message.createMessageComponentCollector({
+    time: 60 * 60 * 1000, // 1h de sécurité
+  });
+  expiredCollector.on('collect', async i => {
+    if (i.customId === 'expired') {
+      await i.reply({ content: '⏱️ Ce menu a expiré. Relance la commande pour une version fraîche.', ephemeral: true });
+    }
+  });
 }
 
 // ============================================================
@@ -389,48 +399,67 @@ const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 let lastStatusMessageId  = null;
 let dailyConnections     = new Set();
 let lastDailySummaryDate = null;
-let apiQueue             = Promise.resolve();
 
 // ============================================================
 // FONCTIONS API
 // ============================================================
 
-async function apiCall(endpoint) {
-  return new Promise(resolve => {
-    apiQueue = apiQueue.then(async () => {
+// Rate limiter : max N requêtes simultanées + gestion 429
+const MAX_CONCURRENT = 5; // Requêtes parallèles max
+let activeRequests   = 0;
+const requestQueue   = [];
+
+function processQueue() {
+  while (requestQueue.length > 0 && activeRequests < MAX_CONCURRENT) {
+    const { fn, resolve, reject } = requestQueue.shift();
+    activeRequests++;
+    fn().then(resolve).catch(reject).finally(() => {
+      activeRequests--;
+      processQueue();
+    });
+  }
+}
+
+function rateLimit(fn) {
+  return new Promise((resolve, reject) => {
+    requestQueue.push({ fn, resolve, reject });
+    processQueue();
+  });
+}
+
+async function apiCall(endpoint, retries = 3) {
+  return rateLimit(async () => {
+    for (let attempt = 1; attempt <= retries; attempt++) {
       try {
         const response = await fetch(`${CONFIG.API_BASE_URL}${endpoint}`);
+
         if (response.status === 429) {
-          console.warn(`⚠️ Rate limit: ${endpoint}`);
-          return resolve(null);
+          const wait = attempt * 2000; // Backoff exponentiel : 2s, 4s, 6s
+          console.warn(`⚠️ Rate limit [${endpoint}] - attente ${wait}ms (tentative ${attempt})`);
+          await new Promise(r => setTimeout(r, wait));
+          continue;
         }
+
         if (response.ok) {
-          // Récupérer le texte brut AVANT JSON.parse
-          // JSON.parse arrondit les grands entiers (Discord IDs 64-bit)
-          // On remplace "discordid": 123456789 par "discordid": "123456789" avant parsing
           const text  = await response.text();
-          // Debug : afficher le discordid brut reçu de l'API
-          const rawDiscord = text.match(/"discordid"\s*:\s*"?(\d+)"?/);
-          if (rawDiscord) console.log(`🔍 discordid brut API [${endpoint}]: ${rawDiscord[1]}`);
-          // Cibler uniquement les champs connus qui contiennent des grands entiers
           const fixed = text
             .replace(/"discordid"\s*:\s*"?(\d+)"?/g, '"discordid":"$1"')
             .replace(/"steamid"\s*:\s*"?(\d+)"?/g,   '"steamid":"$1"');
-          const parsed = JSON.parse(fixed);
-          // Debug : afficher le discordid après parsing
-          const parsedDiscord = parsed?.data?.discordid || parsed?.discordid;
-          if (parsedDiscord) console.log(`✅ discordid après fix [${endpoint}]: ${parsedDiscord}`);
-          resolve(parsed);
-        } else {
-          console.error(`❌ API ${endpoint}: ${response.status}`);
-          resolve(null);
+          return JSON.parse(fixed);
         }
+
+        console.error(`❌ API ${endpoint}: ${response.status}`);
+        return null;
+
       } catch (error) {
-        console.error(`❌ API ${endpoint}: ${error.message}`);
-        resolve(null);
+        if (attempt === retries) {
+          console.error(`❌ API ${endpoint}: ${error.message}`);
+          return null;
+        }
+        await new Promise(r => setTimeout(r, 500 * attempt));
       }
-      await new Promise(r => setTimeout(r, CONFIG.API_DELAY_MS));
-    });
+    }
+    return null;
   });
 }
 
@@ -522,7 +551,7 @@ async function isStaff(steamid) {
 }
 
 // ============================================================
-// RECHERCHE DE JOUEUR — AMÉLIORÉE
+// RECHERCHE DE JOUEUR - AMÉLIORÉE
 // Cherche d'abord dans la famille, puis accepte n'importe quel
 // SteamID64 valide pour des joueurs hors famille.
 // ============================================================
@@ -555,22 +584,18 @@ async function findPlayer(search) {
   }
 
   // Cas 2 : Recherche par nom dans les membres de la famille
-  const members = await getFamilyMembers();
-  const allPlayers = [];
-
-  for (const m of members) {
-    const info = await getPlayerInfo(m.steamid);
-    allPlayers.push({
-      steamid:   m.steamid,
-      name:      info?.last_name || m.steamid,
-      class:     m.class,
-      owner:     m.owner,
-      discordid: info?.discordid || null,
-      coins:     info?.coins || 0,
-      connected: info?.connected || false,
-      inFamily:  true,
-    });
-  }
+  const members  = await getFamilyMembers();
+  const infos    = await Promise.all(members.map(m => getPlayerInfo(m.steamid)));
+  const allPlayers = members.map((m, i) => ({
+    steamid:   m.steamid,
+    name:      infos[i]?.last_name || m.steamid,
+    class:     m.class,
+    owner:     m.owner,
+    discordid: infos[i]?.discordid || null,
+    coins:     infos[i]?.coins || 0,
+    connected: infos[i]?.connected || false,
+    inFamily:  true,
+  }));
 
   const searchLower = search.toLowerCase();
   const familyMatch = allPlayers.filter(p => p.name.toLowerCase().includes(searchLower));
@@ -596,8 +621,12 @@ async function checkOnlineMembers() {
 
   const online = [], offline = [];
 
-  for (const member of members) {
-    const playerInfo = await getPlayerInfo(member.steamid);
+  // Récupérer tous les joueurs en parallèle
+  const playerInfos = await Promise.all(members.map(m => getPlayerInfo(m.steamid)));
+
+  for (let idx = 0; idx < members.length; idx++) {
+    const member     = members[idx];
+    const playerInfo = playerInfos[idx];
     const player = {
       steamid:   member.steamid,
       name:      playerInfo?.last_name || member.steamid,
@@ -626,7 +655,7 @@ function createOnlineEmbed(data) {
   const { online, offline, total, familyInfo } = data;
 
   const embed = new EmbedBuilder()
-    .setTitle(`⚡ ${CONFIG.FAMILY_LABEL} — Membres en ligne`)
+    .setTitle(`⚡ ${CONFIG.FAMILY_LABEL} - Membres en ligne`)
     .setColor(online.length > 0 ? CONFIG.COLOR_ONLINE : CONFIG.COLOR_OFFLINE)
     .setTimestamp()
     .setThumbnail(LOGO_URL)
@@ -715,7 +744,7 @@ async function sendDailySummary() {
     }
 
     const embed = new EmbedBuilder()
-      .setTitle(`📋 ${CONFIG.FAMILY_LABEL} — Résumé du jour`)
+      .setTitle(`📋 ${CONFIG.FAMILY_LABEL} | Résumé du jour`)
       .setColor(CONFIG.COLOR_INFO)
       .setThumbnail(LOGO_URL)
       .setTimestamp()
@@ -767,7 +796,7 @@ function checkDailySummary() {
 // ============================================================
 
 // ============================================================
-// BUILDERS — Fonctions de construction des embeds réutilisables
+// BUILDERS - Fonctions de construction des embeds réutilisables
 // ============================================================
 
 function buildWarnsEmbed(playerName, steamid, warns) {
@@ -779,11 +808,11 @@ function buildWarnsEmbed(playerName, steamid, warns) {
   const formatW = (w, i) => {
     const d  = new Date(w.date);
     const ds = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
-    return `**${i+1}.** [${w.type || 'warn'}] ${w.reason || 'Non spécifiée'} — *${ds}*`;
+    return `**${i+1}.** [${w.type || 'warn'}] ${w.reason || 'Non spécifiée'} - *${ds}*`;
   };
 
   const embed = new EmbedBuilder()
-    .setTitle(`⚠️ Warns — ${playerName}`)
+    .setTitle(`⚠️ Warns - ${playerName}`)
     .setColor(activeW.length > 0 ? CONFIG.COLOR_OFFLINE : oldW.length > 0 ? 0xffa500 : 0x4caf50)
     .setThumbnail(LOGO_URL)
     .setTimestamp()
@@ -846,7 +875,7 @@ async function buildJoueurEmbed(player) {
   const formatWarn = (w, i) => {
     const d  = new Date(w.date);
     const ds = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
-    return `**${i+1}.** [${w.type || 'warn'}] ${w.reason || 'Non précisée'} — *${ds}*`;
+    return `**${i+1}.** [${w.type || 'warn'}] ${w.reason || 'Non précisée'} - *${ds}*`;
   };
 
   let warnsValue;
@@ -904,13 +933,12 @@ Net: **${(totalDep - totalWith).toLocaleString('fr-FR')} €**`,
 
 async function buildBanqueEmbed(bankLogs, familyInfo) {
   const recent      = bankLogs.slice(0, 10);
-  const recentNames = {};
-  for (const tx of recent) {
-    if (!recentNames[tx.steamid]) {
-      const info = await getPlayerInfo(tx.steamid);
-      recentNames[tx.steamid] = info?.last_name || tx.steamid;
-    }
-  }
+  const uniqueSids   = [...new Set(recent.map(tx => tx.steamid))];
+  const sidsInfos    = await Promise.all(uniqueSids.map(sid => getPlayerInfo(sid)));
+  const recentNames  = {};
+  uniqueSids.forEach((sid, i) => {
+    recentNames[sid] = sidsInfos[i]?.last_name || sid;
+  });
   const recentList = recent.map(tx => {
     const name   = recentNames[tx.steamid];
     const amount = Math.abs(tx.money);
@@ -918,7 +946,7 @@ async function buildBanqueEmbed(bankLogs, familyInfo) {
     const sign   = tx.type === 2 ? '+' : '-';
     const d      = new Date(tx.date);
     const ds     = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')} ${d.getHours().toString().padStart(2,'0')}:${d.getMinutes().toString().padStart(2,'0')}`;
-    return `${icon} **${sign}${amount.toLocaleString('fr-FR')} €** — ${name} *(${ds})*`;
+    return `${icon} **${sign}${amount.toLocaleString('fr-FR')} €** - ${name} *(${ds})*`;
   }).join('\n');
 
   const playerTotals = {};
@@ -937,11 +965,11 @@ async function buildBanqueEmbed(bankLogs, familyInfo) {
     topNames[sid] = (await getPlayerInfo(sid))?.last_name || sid;
   }
   const medals     = ['🥇','🥈','🥉','4️⃣','5️⃣'];
-  const topDepList  = topDep.map((t,i)  => `${medals[i]} **${topNames[t[0]]}** — +${t[1].deposits.toLocaleString('fr-FR')} €`).join('\n');
-  const topWithList = topWith.map((t,i) => `${medals[i]} **${topNames[t[0]]}** — -${t[1].withdrawals.toLocaleString('fr-FR')} €`).join('\n');
+  const topDepList  = topDep.map((t,i)  => `${medals[i]} **${topNames[t[0]]}** - +${t[1].deposits.toLocaleString('fr-FR')} €`).join('\n');
+  const topWithList = topWith.map((t,i) => `${medals[i]} **${topNames[t[0]]}** - -${t[1].withdrawals.toLocaleString('fr-FR')} €`).join('\n');
 
   const embed = new EmbedBuilder()
-    .setTitle(`🏦 ${CONFIG.FAMILY_LABEL} — Banque`)
+    .setTitle(`🏦 ${CONFIG.FAMILY_LABEL} - Banque`)
     .setColor(CONFIG.COLOR_INFO)
     .setThumbnail(LOGO_URL)
     .setTimestamp()
@@ -967,19 +995,19 @@ async function buildClassementEmbed(bankLogs) {
   const sorted = Object.entries(playerTotals)
     .map(([steamid, s]) => ({ steamid, net: s.deposits - s.withdrawals, transactions: s.transactions }))
     .sort((a,b) => b.net - a.net).slice(0, 15);
+  const nameInfos = await Promise.all(sorted.map(e => getPlayerInfo(e.steamid)));
   const names = {};
-  for (const e of sorted) {
-    const info = await getPlayerInfo(e.steamid);
-    names[e.steamid] = info?.last_name || e.steamid;
-  }
+  sorted.forEach((e, i) => {
+    names[e.steamid] = nameInfos[i]?.last_name || e.steamid;
+  });
   const medals = ['🥇','🥈','🥉'];
   const list   = sorted.map((p,i) => {
     const medal = i < 3 ? medals[i] : `**${i+1}.**`;
     const sign  = p.net >= 0 ? '+' : '';
-    return `${medal} **${names[p.steamid]}** — ${sign}${p.net.toLocaleString('fr-FR')} € *(${p.transactions} tx)*`;
+    return `${medal} **${names[p.steamid]}** - ${sign}${p.net.toLocaleString('fr-FR')} € *(${p.transactions} tx)*`;
   }).join('\n');
   const embed = new EmbedBuilder()
-    .setTitle(`🏆 ${CONFIG.FAMILY_LABEL} — Classement contributeurs`)
+    .setTitle(`🏆 ${CONFIG.FAMILY_LABEL} - Classement contributeurs`)
     .setColor(CONFIG.COLOR_GOLD)
     .setThumbnail(LOGO_URL)
     .setDescription(list.substring(0, 4000))
@@ -1011,12 +1039,12 @@ client.on('interactionCreate', async interaction => {
     let list = allMembers.map(p => {
       const status = p.connected ? '🟢' : '🔴';
       const role   = p.owner === 1 ? '👑 Chef' : p.class || 'Membre';
-      return `${status} **${p.name}** — ${role}`;
+      return `${status} **${p.name}** - ${role}`;
     }).join('\n');
     if (list.length > 4000) list = list.substring(0, 4000) + '\n...';
 
     const embed = new EmbedBuilder()
-      .setTitle(`⚡ ${CONFIG.FAMILY_LABEL} — Tous les membres`)
+      .setTitle(`⚡ ${CONFIG.FAMILY_LABEL} - Tous les membres`)
       .setColor(CONFIG.COLOR_INFO)
       .setThumbnail(LOGO_URL)
       .setDescription(list)
@@ -1033,7 +1061,7 @@ client.on('interactionCreate', async interaction => {
     if (!familyInfo) { await interaction.editReply('❌ Impossible de récupérer les infos.'); return; }
 
     const embed = new EmbedBuilder()
-      .setTitle(`⚡ ${CONFIG.FAMILY_LABEL} — Informations`)
+      .setTitle(`⚡ ${CONFIG.FAMILY_LABEL} - Informations`)
       .setColor(CONFIG.COLOR_ONLINE)
       .setThumbnail(LOGO_URL)
       .addFields(
@@ -1090,7 +1118,7 @@ client.on('interactionCreate', async interaction => {
       const memberData = members.find(m => String(m.steamid).trim() === String(steamid).trim());
       inFamily    = !!memberData;
       memberRole  = memberData?.class || null;
-      console.log(`🔍 /joueur SteamID "${steamid}" — inFamily: ${inFamily} — membres: ${members.length}`);
+      console.log(`🔍 /joueur SteamID "${steamid}" - inFamily: ${inFamily} - membres: ${members.length}`);
     } else {
       // Recherche par nom dans la famille
       const found = await findPlayer(search);
