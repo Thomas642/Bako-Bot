@@ -13,6 +13,21 @@ const {
 
 const LOGO_URL = "https://i.imgur.com/fyOaYXk.jpeg";
 
+// ── Noms des rangs staff ──────────────────────────────────────
+const STAFF_RANKS = {
+  1:  '🟢 Helpeur-Test',
+  2:  '🟢 Helpeur',
+  4:  '🔵 Modérateur',
+  5:  '🔵 Modérateur V2',
+  6:  '🔵 Modérateur Général',
+  7:  '🟠 Administrateur',
+  8:  '🟠 Administrateur V2',
+  9:  '🟠 Administrateur Général',
+  10: '🔴 Responsable Serveur',
+  11: '🔴 Responsable Staff',
+  14: '⭐ Owner',
+};
+
 // ============================================================
 // CONFIGURATION — À MODIFIER
 // ============================================================
@@ -191,6 +206,8 @@ async function getPlayerInfo(steamid) {
   if (cached) return cached;
   const result = await apiCall(`/players/${steamid}`);
   const data   = result?.data || null;
+  // Forcer discordid en String pour éviter la perte de précision JS sur grands entiers
+  if (data && data.discordid) data.discordid = String(data.discordid);
   if (data) setCache(`player:${steamid}`, data);
   return data;
 }
@@ -684,18 +701,22 @@ client.on('interactionCreate', async interaction => {
     // Calcul des transactions bancaires (famille seulement)
     let totalDep = 0, totalWith = 0;
     if (inFamily) {
-      bankLogs
-        .filter(tx => tx.steamid === steamid)
-        .forEach(tx => {
-          const amount = Math.abs(tx.money);
-          if (tx.type === 2) totalDep += amount; else totalWith += amount;
-        });
+      const playerLogs = bankLogs.filter(tx => String(tx.steamid) === String(steamid));
+      if (playerLogs.length === 0) {
+        console.log(`⚠️ Aucune transaction trouvée pour ${steamid} — l'API banklogs est peut-être paginée`);
+      }
+      playerLogs.forEach(tx => {
+        const amount = Math.abs(tx.money);
+        if (tx.type === 2) totalDep += amount; else totalWith += amount;
+      });
     }
 
     // Construction de l'embed
     const connected = playerInfo?.connected || false;
     const status    = connected ? '🟢 En ligne' : '🔴 Hors ligne';
-    const staff     = staffInfo?.is_staff ? `✅ Staff (rang ${staffInfo.rank_staff})` : '❌ Non staff';
+    const staffRankId   = staffInfo?.rank_staff;
+    const staffRankName = staffRankId ? (STAFF_RANKS[staffRankId] || `Rang ${staffRankId}`) : null;
+    const staff         = staffInfo?.is_staff ? `✅ ${staffRankName}` : '❌ Non staff';
 
     // Rôle dans la famille
     let roleStr = '👤 Hors famille Bako';
