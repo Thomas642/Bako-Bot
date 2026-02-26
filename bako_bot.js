@@ -312,7 +312,7 @@ async function attachMenuCollector(message, menuType, steamid, interaction) {
 
 💎 **Net : ${(dep - with_).toLocaleString('fr-FR')} €**`)
             .setTimestamp()
-            .setFooter({ text: 'Bako Family • Pika Pika ⚡', iconURL: LOGO_URL });
+            .setFooter({ text: 'Famille Bako • Pika Pika ⚡', iconURL: LOGO_URL });
           await i.editReply({ embeds: [embed], components: [createJoueurMenu(sid)] });
           collector.resetTimer();
         }
@@ -333,7 +333,7 @@ async function attachMenuCollector(message, menuType, steamid, interaction) {
             .setDescription(list.substring(0, 4000))
             .addFields({ name: '📊 Résumé', value: `🟢 **${data.online.length}** en ligne / 👥 **${data.total}** total` })
             .setTimestamp()
-            .setFooter({ text: 'Bako Family • Pika Pika ⚡', iconURL: LOGO_URL });
+            .setFooter({ text: 'Famille Bako • Pika Pika ⚡', iconURL: LOGO_URL });
           await i.editReply({ embeds: [embed], components: [createOnlineMenu()] });
           collector.resetTimer();
         }
@@ -659,7 +659,7 @@ function createOnlineEmbed(data) {
     .setColor(online.length > 0 ? CONFIG.COLOR_ONLINE : CONFIG.COLOR_OFFLINE)
     .setTimestamp()
     .setThumbnail(LOGO_URL)
-    .setFooter({ text: `Bako Family • Pika Pika ⚡ | MAJ auto toutes les 8h`, iconURL: LOGO_URL });
+    .setFooter({ text: `Famille Bako • Pika Pika ⚡ | MAJ auto toutes les 8h`, iconURL: LOGO_URL });
 
   if (familyInfo) {
     embed.setDescription(
@@ -748,7 +748,7 @@ async function sendDailySummary() {
       .setColor(CONFIG.COLOR_INFO)
       .setThumbnail(LOGO_URL)
       .setTimestamp()
-      .setFooter({ text: 'Bako Family • Pika Pika ⚡', iconURL: LOGO_URL });
+      .setFooter({ text: 'Famille Bako • Pika Pika ⚡', iconURL: LOGO_URL });
 
     if (familyInfo) {
       embed.setDescription(
@@ -816,7 +816,7 @@ function buildWarnsEmbed(playerName, steamid, warns) {
     .setColor(activeW.length > 0 ? CONFIG.COLOR_OFFLINE : oldW.length > 0 ? 0xffa500 : 0x4caf50)
     .setThumbnail(LOGO_URL)
     .setTimestamp()
-    .setFooter({ text: 'Bako Family • Pika Pika ⚡', iconURL: LOGO_URL });
+    .setFooter({ text: 'Famille Bako • Pika Pika ⚡', iconURL: LOGO_URL });
 
   if (warns.length === 0) {
     embed.setDescription('✅ Aucun avertissement actif.');
@@ -973,7 +973,7 @@ async function buildBanqueEmbed(bankLogs, familyInfo) {
     .setColor(CONFIG.COLOR_INFO)
     .setThumbnail(LOGO_URL)
     .setTimestamp()
-    .setFooter({ text: 'Bako Family • Pika Pika ⚡', iconURL: LOGO_URL });
+    .setFooter({ text: 'Famille Bako • Pika Pika ⚡', iconURL: LOGO_URL });
   if (familyInfo) embed.setDescription(`💰 **Solde :** ${familyInfo.money?.toLocaleString('fr-FR')} €`);
   embed.addFields(
     { name: '📜 10 dernières transactions', value: recentList.substring(0, 1024) },
@@ -1012,7 +1012,7 @@ async function buildClassementEmbed(bankLogs) {
     .setThumbnail(LOGO_URL)
     .setDescription(list.substring(0, 4000))
     .setTimestamp()
-    .setFooter({ text: 'Bako Family • Pika Pika ⚡ | Trié par dépôts nets', iconURL: LOGO_URL });
+    .setFooter({ text: 'Famille Bako • Pika Pika ⚡ | Trié par dépôts nets', iconURL: LOGO_URL });
   return { embed };
 }
 
@@ -1050,7 +1050,7 @@ client.on('interactionCreate', async interaction => {
       .setDescription(list)
       .addFields({ name: '📊 Résumé', value: `🟢 **${data.online.length}** en ligne / 👥 **${data.total}** total` })
       .setTimestamp()
-      .setFooter({ text: 'Bako Family • Pika Pika ⚡', iconURL: LOGO_URL });
+      .setFooter({ text: 'Famille Bako • Pika Pika ⚡', iconURL: LOGO_URL });
     await interaction.editReply({ embeds: [embed] });
   }
 
@@ -1069,7 +1069,7 @@ client.on('interactionCreate', async interaction => {
         { name: '⭐ Points', value: `**${Math.round((familyInfo.points || 0) * 100) / 100}**`, inline: true }
       )
       .setTimestamp()
-      .setFooter({ text: 'Bako Family • Pika Pika ⚡', iconURL: LOGO_URL });
+      .setFooter({ text: 'Famille Bako • Pika Pika ⚡', iconURL: LOGO_URL });
     await interaction.editReply({ embeds: [embed] });
   }
 
