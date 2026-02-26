@@ -176,7 +176,12 @@ async function apiCall(endpoint) {
           return resolve(null);
         }
         if (response.ok) {
-          resolve(await response.json());
+          // Récupérer le texte brut AVANT JSON.parse
+          // JSON.parse arrondit les grands entiers (Discord IDs 64-bit)
+          // On remplace "discordid": 123456789 par "discordid": "123456789" avant parsing
+          const text    = await response.text();
+          const fixed   = text.replace(/"discordid"\s*:\s*(\d{10,})/g, '"discordid":"$1"');
+          resolve(JSON.parse(fixed));
         } else {
           console.error(`❌ API ${endpoint}: ${response.status}`);
           resolve(null);
@@ -206,8 +211,6 @@ async function getPlayerInfo(steamid) {
   if (cached) return cached;
   const result = await apiCall(`/players/${steamid}`);
   const data   = result?.data || null;
-  // Forcer discordid en String pour éviter la perte de précision JS sur grands entiers
-  if (data && data.discordid) data.discordid = String(data.discordid);
   if (data) setCache(`player:${steamid}`, data);
   return data;
 }
@@ -222,14 +225,46 @@ async function getFamilyInfo() {
   return data;
 }
 
-// ── Logs bancaires ────────────────────────────────────────────
+// ── Logs bancaires avec pagination complète ────────────────────
 async function getBankLogs() {
   const cached = getCached('banklogs', CONFIG.CACHE_DURATION.BANK_LOGS);
   if (cached) return cached;
-  const result = await apiCall(`/darkrp/familles/${encodeURIComponent(CONFIG.FAMILY_NAME)}/banklogs`);
-  const data   = result?.data || [];
-  if (data.length > 0) setCache('banklogs', data);
-  return data;
+
+  let allLogs = [];
+  let page    = 1;
+  const limit = 100; // Taille de page à tester
+  let hasMore = true;
+
+  while (hasMore) {
+    // Tenter avec paramètre page (si l'API le supporte)
+    const result = await apiCall(
+      `/darkrp/familles/${encodeURIComponent(CONFIG.FAMILY_NAME)}/banklogs?page=${page}&limit=${limit}`
+    );
+    const batch = result?.data || [];
+
+    if (batch.length === 0) {
+      hasMore = false;
+    } else {
+      allLogs = allLogs.concat(batch);
+      console.log(`📦 Banklogs page ${page} : ${batch.length} transactions (total: ${allLogs.length})`);
+      // Si moins que limit reçu → dernière page
+      if (batch.length < limit) hasMore = false;
+      else page++;
+      // Sécurité : max 20 pages pour éviter une boucle infinie
+      if (page > 20) { console.warn("⚠️ Banklogs : limite de 20 pages atteinte"); hasMore = false; }
+    }
+  }
+
+  // Fallback si l'API ne supporte pas la pagination : une seule requête sans paramètres
+  if (allLogs.length === 0) {
+    console.log("⚠️ Pagination non supportée, fallback sans paramètres");
+    const result = await apiCall(`/darkrp/familles/${encodeURIComponent(CONFIG.FAMILY_NAME)}/banklogs`);
+    allLogs = result?.data || [];
+  }
+
+  console.log(`✅ Banklogs total : ${allLogs.length} transactions`);
+  if (allLogs.length > 0) setCache('banklogs', allLogs);
+  return allLogs;
 }
 
 // ── Warns d'un joueur ─────────────────────────────────────────
@@ -836,7 +871,7 @@ client.on('interactionCreate', async interaction => {
 // DÉMARRAGE
 // ============================================================
 
-client.once('ready', async () => {
+client.once('clientReady', async () => {
   console.log(`✅ Bot connecté : ${client.user.tag}`);
   console.log(`⚡ Famille      : ${CONFIG.FAMILY_LABEL}`);
   console.log(`⏰ Statut auto  : toutes les ${CONFIG.CHECK_INTERVAL_MINUTES} min`);
