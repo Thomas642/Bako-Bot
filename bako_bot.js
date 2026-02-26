@@ -711,11 +711,18 @@ client.on('interactionCreate', async interaction => {
     let memberRole = null;
 
     if (/^7656\d{13}$/.test(search)) {
-      // SteamID direct → n'importe quel joueur
+      // SteamID direct → vérifier aussi si dans la famille
       steamid = search;
-      const info = await getPlayerInfo(steamid);
+      const [info, members] = await Promise.all([
+        getPlayerInfo(steamid),
+        getFamilyMembers(),
+      ]);
       if (!info) { await interaction.editReply(`❌ Joueur introuvable pour le SteamID \`${steamid}\`.`); return; }
-      playerName = info.last_name || steamid;
+      playerName  = info.last_name || steamid;
+      const memberData = members.find(m => String(m.steamid).trim() === String(steamid).trim());
+      inFamily    = !!memberData;
+      memberRole  = memberData?.class || null;
+      console.log(`🔍 /joueur SteamID "${steamid}" — inFamily: ${inFamily} — membres: ${members.length}`);
     } else {
       // Recherche par nom dans la famille
       const found = await findPlayer(search);
