@@ -521,14 +521,14 @@ async function sendDailySummary() {
 }
 
 function checkDailySummary() {
-  const now       = new Date();
-  const todayDate = now.toDateString();
-  if (
-    now.getHours()   === CONFIG.DAILY_SUMMARY_HOUR &&
-    now.getMinutes() === CONFIG.DAILY_SUMMARY_MINUTE &&
-    lastDailySummaryDate !== todayDate
-  ) {
-    lastDailySummaryDate = todayDate;
+  const now        = new Date();
+  const hours      = now.getHours();
+  const minutes    = now.getMinutes();
+  // Envoyer le résumé toutes les 8h (00h, 08h, 16h)
+  const SUMMARY_HOURS = [0, 8, 16];
+  const key        = `${now.toDateString()}-${hours}`;
+  if (SUMMARY_HOURS.includes(hours) && minutes === 0 && lastDailySummaryDate !== key) {
+    lastDailySummaryDate = key;
     sendDailySummary();
   }
 }
@@ -929,7 +929,7 @@ client.once('clientReady', async () => {
   console.log(`✅ Bot connecté : ${client.user.tag}`);
   console.log(`⚡ Famille      : ${CONFIG.FAMILY_LABEL}`);
   console.log(`⏰ Statut auto  : toutes les ${CONFIG.CHECK_INTERVAL_MINUTES} min`);
-  console.log(`📋 Résumé       : ${CONFIG.DAILY_SUMMARY_HOUR}h${CONFIG.DAILY_SUMMARY_MINUTE.toString().padStart(2,'0')}`);
+  console.log(`📋 Résumé       : toutes les 8h (00h, 08h, 16h)`);
 
   await registerCommands();
 
