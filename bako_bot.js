@@ -236,44 +236,37 @@ async function getFamilyInfo() {
 }
 
 // ── Logs bancaires avec pagination complète ────────────────────
+// API LYG : limit max=100, pagination via result.pagination.hasNextPage
 async function getBankLogs() {
   const cached = getCached('banklogs', CONFIG.CACHE_DURATION.BANK_LOGS);
   if (cached) return cached;
 
   let allLogs = [];
   let page    = 1;
-  const limit = 100; // Taille de page à tester
-  let hasMore = true;
+  const limit = 100; // Max autorisé par l'API LYG
 
-  while (hasMore) {
-    // Tenter avec offset (page-1)*limit pour les APIs style offset/limit
-    const offset = (page - 1) * limit;
+  while (true) {
     const result = await apiCall(
-      `/darkrp/familles/${encodeURIComponent(CONFIG.FAMILY_NAME)}/banklogs?page=${page}&limit=${limit}&offset=${offset}`
+      `/darkrp/familles/${encodeURIComponent(CONFIG.FAMILY_NAME)}/banklogs?page=${page}&limit=${limit}`
     );
-    const batch = result?.data || [];
 
-    if (batch.length === 0) {
-      hasMore = false;
-    } else {
-      allLogs = allLogs.concat(batch);
-      console.log(`📦 Banklogs page ${page} : ${batch.length} transactions (total: ${allLogs.length})`);
-      // Si moins que limit reçu → dernière page
-      if (batch.length < limit) hasMore = false;
-      else page++;
-      // Sécurité : max 20 pages pour éviter une boucle infinie
-      if (page > 20) { console.warn("⚠️ Banklogs : limite de 20 pages atteinte"); hasMore = false; }
-    }
+    const batch      = result?.data        || [];
+    const pagination = result?.pagination  || {};
+
+    if (batch.length === 0) break;
+
+    allLogs = allLogs.concat(batch);
+    console.log(`📦 Banklogs page ${page}/${pagination.totalPages || '?'} : ${batch.length} tx (total: ${allLogs.length}/${pagination.total || '?'})`);
+
+    // Utiliser hasNextPage fourni par l'API
+    if (!pagination.hasNextPage) break;
+    page++;
+
+    // Sécurité anti-boucle infinie
+    if (page > 50) { console.warn("⚠️ Banklogs : limite de 50 pages atteinte"); break; }
   }
 
-  // Fallback si l'API ne supporte pas la pagination : une seule requête sans paramètres
-  if (allLogs.length === 0) {
-    console.log("⚠️ Pagination non supportée, fallback sans paramètres");
-    const result = await apiCall(`/darkrp/familles/${encodeURIComponent(CONFIG.FAMILY_NAME)}/banklogs`);
-    allLogs = result?.data || [];
-  }
-
-  console.log(`✅ Banklogs total : ${allLogs.length} transactions`);
+  console.log(`✅ Banklogs complets : ${allLogs.length} transactions récupérées`);
   if (allLogs.length > 0) setCache('banklogs', allLogs);
   return allLogs;
 }
