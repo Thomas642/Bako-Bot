@@ -881,15 +881,33 @@ client.on('interactionCreate', async interaction => {
       .setTimestamp()
       .setFooter({ text: 'Bako Family • Pika Pika ⚡', iconURL: LOGO_URL });
 
+    const now2        = Date.now();
+    const TWO_MONTHS2 = 60 * 24 * 60 * 60 * 1000;
+    const activeW     = warns.filter(w => (now2 - new Date(w.date).getTime()) < TWO_MONTHS2);
+    const oldW        = warns.filter(w => (now2 - new Date(w.date).getTime()) >= TWO_MONTHS2);
+
+    const formatW = (w, i) => {
+      const d  = new Date(w.date);
+      const ds = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
+      return `**${i+1}.** [${w.type || 'warn'}] ${w.reason || 'Non spécifiée'} — *${ds}*`;
+    };
+
+    // Couleur selon warns actifs
+    embed.setColor(activeW.length > 0 ? CONFIG.COLOR_OFFLINE : oldW.length > 0 ? 0xffa500 : 0x4caf50);
+
     if (warns.length === 0) {
       embed.setDescription('✅ Aucun avertissement actif.');
     } else {
-      const warnList = warns.map((w, i) => {
-        const d  = new Date(w.date);
-        const ds = `${d.getDate().toString().padStart(2,'0')}/${(d.getMonth()+1).toString().padStart(2,'0')}/${d.getFullYear()}`;
-        return `**${i+1}.** [${w.type || 'warn'}] ${w.reason || 'Non spécifiée'} — *${ds}*`;
-      }).join('\n');
-      embed.setDescription(`**${warns.length}** warn(s) actif(s) :\n\n${warnList.substring(0, 4000)}`);
+      let desc = '';
+      if (activeW.length > 0) {
+        desc += `🔴 **${activeW.length}** warn(s) actif(s) :\n${activeW.map(formatW).join('\n')}`;
+      } else {
+        desc += '✅ Aucun warn actif récent';
+      }
+      if (oldW.length > 0) {
+        desc += `\n\n🟡 **${oldW.length}** oldwarn(s) (> 2 mois) :\n${oldW.map(formatW).join('\n')}`;
+      }
+      embed.setDescription(desc.substring(0, 4000));
     }
 
     embed.addFields({ name: '🎮 SteamID', value: `\`${steamid}\`` });
