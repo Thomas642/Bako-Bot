@@ -785,10 +785,10 @@ function checkDailySummary() {
   // Envoyer le résumé toutes les 8h (00h, 08h, 16h)
   const SUMMARY_HOURS = [0, 8, 16];
   const key        = `${now.toDateString()}-${hours}`;
-  if (SUMMARY_HOURS.includes(hours) && minutes === 0 && lastDailySummaryDate !== key) {
-    lastDailySummaryDate = key;
-    sendDailySummary();
-  }
+  if (hours === 23 && minutes === 0 && lastDailySummaryDate !== now.toDateString()) {
+  lastDailySummaryDate = now.toDateString();
+  sendDailySummary();
+}
 }
 
 // ============================================================
